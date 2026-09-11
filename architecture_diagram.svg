@@ -1,0 +1,212 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" width="1100" height="720">
+    <defs>
+        <linearGradient id="gradIngest" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#1e3a8a" />
+            <stop offset="100%" stop-color="#1e293b" />
+        </linearGradient>
+        <linearGradient id="gradLayout" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#065f46" />
+            <stop offset="100%" stop-color="#1e293b" />
+        </linearGradient>
+        <linearGradient id="gradMapping" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#7c2d12" />
+            <stop offset="100%" stop-color="#1e293b" />
+        </linearGradient>
+        <linearGradient id="gradValid" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#4c1d95" />
+            <stop offset="100%" stop-color="#1e293b" />
+        </linearGradient>
+        <linearGradient id="gradStorage" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0f766e" />
+            <stop offset="100%" stop-color="#1e293b" />
+        </linearGradient>
+        <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+            <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+        </filter>
+        <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+        </marker>
+        <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399" />
+        </marker>
+        <marker id="arrowAmber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24" />
+        </marker>
+    </defs>
+
+    <!-- Background -->
+    <rect width="1100" height="720" fill="#0f172a" rx="10"/>
+
+    <!-- STAGE 1: INGEST & PREPROCESS -->
+    <g transform="translate(30, 40)" filter="url(#shadow)">
+        <rect width="180" height="420" rx="8" fill="url(#gradIngest)" stroke="#3b82f6" stroke-width="1.5"/>
+        <text x="90" y="30" fill="#60a5fa" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" text-anchor="middle">1. INGEST &amp; PREPROCESS</text>
+        
+        <rect x="15" y="55" width="150" height="65" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="80" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="600" text-anchor="middle">📸 Source Document</text>
+        <text x="90" y="100" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">Photos, Scans, Dot-matrix</text>
+
+        <rect x="15" y="135" width="150" height="110" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="155" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">OpenCV Preprocessing</text>
+        <text x="90" y="175" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Boundary &amp; Dewarp</text>
+        <text x="90" y="195" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Theil-Sen Deskew</text>
+        <text x="90" y="215" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Shadow Division</text>
+        <text x="90" y="235" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Adaptive Threshold</text>
+
+        <rect x="15" y="260" width="150" height="75" rx="6" fill="#1e293b" stroke="#f59e0b"/>
+        <text x="90" y="280" fill="#fbbf24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">🛡️ Quality Gate</text>
+        <text x="90" y="300" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Truncation Check</text>
+        <text x="90" y="320" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Blur / Contrast Guard</text>
+
+        <rect x="15" y="350" width="150" height="50" rx="6" fill="#450a0a" stroke="#ef4444"/>
+        <text x="90" y="372" fill="#fca5a5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="600" text-anchor="middle">Reject Bad Capture</text>
+        <text x="90" y="388" fill="#f87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">(poor_capture queue)</text>
+    </g>
+
+    <!-- Connector 1 -> 2 -->
+    <path d="M 210 297 L 245 297" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- STAGE 2: OCR & LAYOUT -->
+    <g transform="translate(250, 40)" filter="url(#shadow)">
+        <rect width="180" height="420" rx="8" fill="url(#gradLayout)" stroke="#10b981" stroke-width="1.5"/>
+        <text x="90" y="30" fill="#34d399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" text-anchor="middle">2. OCR &amp; STRUCTURE</text>
+
+        <rect x="15" y="55" width="150" height="70" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="78" fill="#34d399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">PaddleOCR Engine</text>
+        <text x="90" y="98" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">Token Text + BBoxes</text>
+        <text x="90" y="114" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">Confidence &amp; Cache</text>
+
+        <rect x="15" y="135" width="150" height="75" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="155" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Layout Segmentation</text>
+        <text x="90" y="175" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Header &amp; Meta</text>
+        <text x="90" y="195" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Stock Table &amp; Totals</text>
+
+        <rect x="15" y="220" width="150" height="90" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="240" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Table Extraction</text>
+        <text x="90" y="260" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Ruled: PP-Structure</text>
+        <text x="90" y="280" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Borderless: Gutters</text>
+        <text x="90" y="298" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">&amp; Numeric Clustering</text>
+
+        <rect x="15" y="320" width="150" height="80" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="340" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Header &amp; Row Tree</text>
+        <text x="90" y="360" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Multi-tier Header Nesting</text>
+        <text x="90" y="380" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Sloped Baseline Rows</text>
+    </g>
+
+    <!-- Connector 2 -> 3 -->
+    <path d="M 430 297 L 465 297" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- STAGE 3: SEMANTIC MAPPING -->
+    <g transform="translate(470, 40)" filter="url(#shadow)">
+        <rect width="180" height="420" rx="8" fill="url(#gradMapping)" stroke="#f97316" stroke-width="1.5"/>
+        <text x="90" y="30" fill="#fb923c" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" text-anchor="middle">3. SEMANTIC MAPPING</text>
+
+        <rect x="15" y="55" width="150" height="60" rx="6" fill="#1e293b" stroke="#38bdf8"/>
+        <text x="90" y="75" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Tier 1: Template Hash</text>
+        <text x="90" y="95" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">Cached Fingerprint Hit</text>
+
+        <rect x="15" y="125" width="150" height="60" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="145" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Tier 2: Exact Match</text>
+        <text x="90" y="165" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">Path in column_mappings</text>
+
+        <rect x="15" y="195" width="150" height="60" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="215" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Tier 3: Normalization</text>
+        <text x="90" y="235" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">Aliases &amp; Abbreviations</text>
+
+        <rect x="15" y="265" width="150" height="60" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="285" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Tier 4: Fuzzy Match</text>
+        <text x="90" y="305" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">RapidFuzz (&gt;=90%)</text>
+
+        <rect x="15" y="335" width="150" height="65" rx="6" fill="#2d1b0d" stroke="#f59e0b"/>
+        <text x="90" y="355" fill="#fbbf24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Tier 5: Fallback</text>
+        <text x="90" y="373" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">Keep in unmapped_columns</text>
+        <text x="90" y="388" fill="#f59e0b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">Flag for Human Review</text>
+    </g>
+
+    <!-- Connector 3 -> 4 -->
+    <path d="M 650 297 L 685 297" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- STAGE 4: CANONICAL & VALIDATION -->
+    <g transform="translate(690, 40)" filter="url(#shadow)">
+        <rect width="180" height="420" rx="8" fill="url(#gradValid)" stroke="#a855f7" stroke-width="1.5"/>
+        <text x="90" y="30" fill="#c084fc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" text-anchor="middle">4. ASSEMBLY &amp; RULES</text>
+
+        <rect x="15" y="55" width="150" height="75" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="75" fill="#c084fc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">3-Level Data Model</text>
+        <text x="90" y="93" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">1. Document Meta</text>
+        <text x="90" y="108" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">2. Product (HSN/Master)</text>
+        <text x="90" y="123" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">3. Transactions &amp; Stock</text>
+
+        <rect x="15" y="140" width="150" height="110" rx="6" fill="#1e293b" stroke="#a855f7"/>
+        <text x="90" y="160" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Validation Engine</text>
+        <text x="90" y="180" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• R1: Reconcile Balance</text>
+        <text x="90" y="198" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• R2: Totals Cross-Foot</text>
+        <text x="90" y="216" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• R3: Derived Columns</text>
+        <text x="90" y="234" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• R4: Rate × Qty Coherence</text>
+
+        <rect x="15" y="260" width="150" height="65" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="280" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Product Master Match</text>
+        <text x="90" y="298" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">HSN Code &gt; Code &gt; Fuzzy</text>
+        <text x="90" y="314" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">(Unmatched -&gt; Review)</text>
+
+        <rect x="15" y="335" width="150" height="65" rx="6" fill="#1e293b" stroke="#475569"/>
+        <text x="90" y="355" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Decision Splitter</text>
+        <text x="90" y="375" fill="#34d399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">All Rules Pass? ➔ Auto</text>
+        <text x="90" y="390" fill="#fbbf24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">Any Failure? ➔ Review</text>
+    </g>
+
+    <!-- Connector 4 -> 5 -->
+    <path d="M 870 297 L 905 297" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- STAGE 5: STORAGE & OUTPUT -->
+    <g transform="translate(910, 40)" filter="url(#shadow)">
+        <rect width="160" height="420" rx="8" fill="url(#gradStorage)" stroke="#14b8a6" stroke-width="1.5"/>
+        <text x="80" y="30" fill="#2dd4bf" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" text-anchor="middle">5. STORAGE &amp; APIS</text>
+
+        <rect x="10" y="65" width="140" height="85" rx="6" fill="#1e293b" stroke="#10b981"/>
+        <text x="70" y="90" fill="#34d399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" text-anchor="middle">🗄️ MySQL Database</text>
+        <text x="70" y="110" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">Canonical 3-Level Store</text>
+        <text x="70" y="128" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">Traceability &amp; Logs</text>
+
+        <rect x="10" y="175" width="140" height="95" rx="6" fill="#1e293b" stroke="#38bdf8"/>
+        <text x="70" y="200" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" text-anchor="middle">📊 Output Surfaces</text>
+        <text x="70" y="222" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Excel / CSV Export</text>
+        <text x="70" y="242" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• FastAPI Endpoints</text>
+        <text x="70" y="258" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Redis Job Queue</text>
+
+        <rect x="10" y="295" width="140" height="105" rx="6" fill="#1e293b" stroke="#6366f1"/>
+        <text x="70" y="320" fill="#818cf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">State &amp; Integrity</text>
+        <text x="70" y="342" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Audit Trail</text>
+        <text x="70" y="362" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Per-Field Confidence</text>
+        <text x="70" y="382" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Zero Data Loss</text>
+    </g>
+
+    <!-- HUMAN REVIEW & LEARNING LOOP SECTION -->
+    <g transform="translate(30, 490)" filter="url(#shadow)">
+        <rect width="1040" height="190" rx="8" fill="#1e1b4b" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="520" y="28" fill="#a5b4fc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" text-anchor="middle">HUMAN-IN-THE-LOOP &amp; SELF-LEARNING FEEDBACK SYSTEM</text>
+
+        <!-- UI Box -->
+        <rect x="220" y="45" width="300" height="120" rx="6" fill="#1e293b" stroke="#fbbf24"/>
+        <text x="370" y="70" fill="#fbbf24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" text-anchor="middle">🖥️ React Human Review Dashboard</text>
+        <text x="370" y="92" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Original document crop alongside extracted row</text>
+        <text x="370" y="110" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Per-field confidence visualizer &amp; suggested fixes</text>
+        <text x="370" y="128" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Handles: unmapped columns, low OCR confidence</text>
+        <text x="370" y="146" fill="#f87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" text-anchor="middle">Rejection or Approval Actions</text>
+
+        <!-- Feedback Loop Box -->
+        <rect x="560" y="45" width="300" height="120" rx="6" fill="#1e293b" stroke="#34d399"/>
+        <text x="710" y="70" fill="#34d399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" text-anchor="middle">🔄 Auto-Update &amp; Configuration Learning</text>
+        <text x="710" y="92" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Confirmed column alias writes to column_mappings.yaml</text>
+        <text x="710" y="110" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Template signature cached to templates.yaml</text>
+        <text x="710" y="128" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" text-anchor="middle">• Product Master bootstrap confirmation</text>
+        <text x="710" y="148" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="600" text-anchor="middle">➔ Resolves 100% Deterministically on Next Run!</text>
+    </g>
+
+    <!-- Arrows to/from Review Loop -->
+    <path d="M 780 460 L 780 475 L 370 475 L 370 535" stroke="#fbbf24" stroke-width="2" fill="none" marker-end="url(#arrowAmber)"/>
+    <path d="M 520 595 L 560 595" stroke="#34d399" stroke-width="2" marker-end="url(#arrowGreen)"/>
+    <path d="M 710 535 L 710 475 L 560 475 L 560 460" stroke="#34d399" stroke-width="2" stroke-dasharray="3,3" fill="none" marker-end="url(#arrowGreen)"/>
+    <path d="M 860 595 L 980 595 L 980 460" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#arrowGreen)"/>
+
+</svg>

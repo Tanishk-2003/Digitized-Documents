@@ -1,0 +1,59 @@
+# Distributor master. Used by the document-detection stage (P4) to resolve
+# distributor_id / distributor_name against free text read off the page header,
+# instead of persisting whatever string OCR happened to produce.
+#
+# Seeded by manual read of data/input/doc1-doc6.jpg during planning. These are
+# transcriptions by eye, not OCR output — re-verify phone/GSTIN digits once the
+# real OCR stage (P2) runs on these pages, since they were not cross-checked
+# digit-by-digit here.
+
+distributors:
+  - distributor_id: "new-tripura-pharmaco"
+    name: "New Tripura Pharmaco"
+    aliases: ["NEW TRIPURA PHARMACO"]
+    address: "72, H.G.B. Road, Agartala"
+    template_family: "new_tripura"  # borderless, distributor-specific layout (doc1) — not the MARG template,
+                                     # but its own family (config/validation_rules.yaml) for R1 reconciliation
+    source_documents: ["doc1.jpg"]
+
+  - distributor_id: "nabin-drug-centre"
+    name: "Nabin Drug Centre"
+    aliases: ["NABIN DRUG CENTRE"]
+    address: "N S Road, Old Motor Stand, Dharmanagar, Tripura North"
+    phone: "9862304087"
+    template_family: "nabin"        # ruled-grid template, distinct from MARG
+    source_documents: ["doc2.jpg", "doc3.jpg"]
+
+  - distributor_id: "mediland"
+    name: "Mediland"
+    aliases: ["MEDILAND"]
+    address: "Ronaldsay Road, Battala, 1st Floor, Agartala, Tripura (W)"
+    phone: "9862890990"
+    email: "tapan.mediland18@gmail.com"
+    gstin: "16AHPPS4885B1ZW"
+    template_family: "marg"         # shared ERP template — see plan section 1.3
+    source_documents: ["doc4.jpg"]
+
+  - distributor_id: "bn-drug-distributor"
+    name: "B.N. Drug Distributor"
+    aliases: ["B.N.DRUG DISTRIBUTOR", "BN DRUG DISTRIBUTOR"]
+    address: "H.G.Road, Melarmath, Agartala, Tripura-799001"
+    phone: "0381-3562954, 9436127165"
+    gstin: "16ADOPD2894E1ZH"
+    template_family: "marg"
+    source_documents: ["doc5.jpg"]
+
+  - distributor_id: "medico-drug-agency"
+    name: "Medico Drug Agency"
+    aliases: ["MEDICO DRUG AGENCY"]
+    address: "Ronaldsay Road, Battala, Agartala, Tripura (W)"
+    phone: "03812306004, 9366472916"
+    gstin: "16ABVPR4284M1ZH"
+    template_family: "marg"
+    source_documents: ["doc6.jpg"]
+
+companies:
+  - company_name: "Eris Lifescience Limited"
+    aliases: ["ERIS LIFESCIENCE", "ERIS LIFESCIENCE LIMITED (PHARMA DIVISION)"]
+  - company_name: "Zorvia Healthcare Limited"
+    aliases: ["ZORVIA HEALTHCARE", "ZORVIA HEALTHCARE LTD", "ZORVIA HEALTHCARE LIMITED(ZFORCE 1)(ZH)"]

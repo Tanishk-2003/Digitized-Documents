@@ -1,0 +1,13 @@
+{
+  "source_file": "doc5.jpg",
+  "distributor_name": "B.N. Drug Distributor",
+  "company_name": "Zorvia Healthcare Limited (ZH)",
+  "statement_from": "2026-07-01",
+  "statement_to": "2026-07-30",
+  "document_type": "product_level",
+  "page_number": 1,
+  "page_count": 1,
+  "expected_line_item_count": 5,
+  "has_purchase_detail_region": true,
+  "notes": "MARG-template table, no RATE column (unlike doc4/doc6 -- confirms column subsets vary per document, mapping must key off headers present, not position). Contains a separate embedded Purchase Detail block (Invoice No/Date/Receive Date/Amount/Supplier) -- must segment into its own region, not merge into the stock table (MVP criterion 5). RECEIPT QTY = -1 on COSKLOT HMB TAB is a negative value -- open decision D4. Photo shows a faint 'MARG PREVIEW' banner confirming the shared ERP template."
+}

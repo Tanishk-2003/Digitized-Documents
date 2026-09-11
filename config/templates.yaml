@@ -1,0 +1,12 @@
+# Template fingerprint cache (IMPLEMENTATION_PLAN.md section 1.3).
+#
+# Key = hash of the normalized leaf-header signature of a stock table.
+# Value = the resolved column mapping for that exact header layout, so a new
+# document from an already-seen template resolves with zero fuzzy matching.
+#
+# Populated at runtime by the P4/P5 detection+mapping stages after a table's
+# columns are first resolved (deterministically or via human review). Empty
+# at P0 — this file exists so the config loader has a real (if empty) target
+# and downstream stages don't need a special case for "cache not built yet".
+
+fingerprints: {}

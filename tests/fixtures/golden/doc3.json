@@ -1,0 +1,12 @@
+{
+  "source_file": "doc3.jpg",
+  "distributor_name": "Nabin Drug Centre",
+  "company_name": "Eris Lifescience Limited (Pharma Division)",
+  "statement_from": "2026-07-01",
+  "statement_to": "2026-07-31",
+  "document_type": "summary",
+  "page_number": 2,
+  "page_count": 2,
+  "expected_line_item_count": 0,
+  "notes": "Company-level totals only, one row, values only (no quantities). SOLD VALUE splits PTR/PTS in one cell -- open decision D5 in IMPLEMENTATION_PLAN.md section 8. Photograph is cut off at the right edge (CLOSING VALUE[PT... truncated) -- this is the real example of the quality-gate 'page_truncated' case, not a hypothetical. page_number=2 per the doc2.jpg discrepancy note; not independently confirmed since the page-number corner of this photo wasn't captured in frame."
+}

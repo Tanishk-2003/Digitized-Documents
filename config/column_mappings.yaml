@@ -1,0 +1,125 @@
+product_name_raw:
+  aliases:
+  - product
+  - product name
+  - item description
+hsn_code:
+  aliases:
+  - hsn code
+pack:
+  aliases:
+  - pack
+rate:
+  aliases:
+  - rate
+opening_quantity:
+  paths:
+  - - opening
+    - qty.
+  - - opening
+    - qty
+  aliases:
+  - opening stock
+  - open qty
+  - opening qty
+  - op stock
+  - open qty.
+  - new_custom_hdr
+opening_value:
+  paths:
+  - - opening
+    - value
+  aliases:
+  - opening value
+  - opening value[pts]
+received_quantity:
+  paths:
+  - - receipt
+    - qty.
+  - - receipt
+    - qty
+  aliases:
+  - purchase quantity
+  - rcvd.qty
+  - rcvd qty
+  - recpt qty
+  - received
+  - received qty
+received_value:
+  paths:
+  - - receipt
+    - value
+  aliases:
+  - receipt value
+  - receive value[pts]
+free_received_quantity:
+  aliases:
+  - free rcvd.
+  - free rcvd
+  - free received
+sales_quantity:
+  paths:
+  - - issue
+    - qty.
+  - - issue
+    - qty
+  aliases:
+  - sales quantity
+  - sold qty
+sales_value:
+  paths:
+  - - issue
+    - value
+  aliases:
+  - sales value
+free_sales_quantity:
+  aliases:
+  - free sold
+sales_return_quantity:
+  combine: sum
+  aliases:
+  - sale rtn
+  - sales return
+  - market return
+  - return outward
+  - short quantity
+purchase_return_quantity:
+  aliases:
+  - prch rtn
+  - purchase return
+  - prch. retn.value[pts]
+expired_quantity:
+  aliases:
+  - expired qty
+closing_quantity:
+  paths:
+  - - closing
+    - qty.
+  - - closing
+    - qty
+  aliases:
+  - closing stock
+  - clos qty
+  - p10_test_hdr
+closing_value:
+  paths:
+  - - closing
+    - value
+  aliases:
+  - closing value
+  - closing value[pts]
+months_to_expiry:
+  paths:
+  - - dump
+    - m.exp
+  - - m.exp
+  aliases:
+  - m.exp
+stock_status:
+  aliases:
+  - stock status
+derived_check_only:
+  aliases:
+  - total rcvd.
+  - total rcvd
+  - total sold

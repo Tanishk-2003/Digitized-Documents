@@ -1,0 +1,47 @@
+# Reconciliation formulas and tolerances, keyed by template_family (see
+# config/distributors.yaml). Different distributor-software templates report
+# different granularity, so they legitimately need different formulas — this
+# is why the formula lives in config, not in a per-distributor code branch.
+#
+# Both formulas below were hand-verified against real printed rows during
+# planning (IMPLEMENTATION_PLAN.md section 1.2, finding 5):
+#   - "nabin": every one of the 12 product rows on doc2.jpg satisfies it exactly
+#     (e.g. 85 + 0 - 15 - 0 + 0 - 25 = 45; 194 - 104 - 12 = 78).
+#   - "marg":  doc6.jpg row-by-row, e.g. 55 + 120 - 81 = 94 (COSKLOT-PLUS TAB).
+
+families:
+  nabin:
+    # opening + received + free_received - sales - free_sales - sales_return
+    #   + purchase_return - expired = closing
+    reconciliation:
+      formula: "opening_quantity + received_quantity + free_received_quantity \
+                - sales_quantity - free_sales_quantity - sales_return_quantity \
+                + purchase_return_quantity - expired_quantity = closing_quantity"
+      tolerance_abs: 0
+
+  marg:
+    # opening + receipt - issue = closing
+    # NOTE: this treats ISSUE as sales_quantity per the ASSUMPTION flagged in
+    # column_mappings.yaml (plan open decision D1). If ISSUE turns out to mean
+    # something other than sales, this formula must move with it.
+    reconciliation:
+      formula: "opening_quantity + received_quantity - sales_quantity = closing_quantity"
+      tolerance_abs: 0
+
+  new_tripura:
+    # Same shape as "marg" once Market Return / Return Outward / Short Quantity
+    # are summed into sales_return_quantity by the mapping dictionary's
+    # combine:sum handling — but New Tripura's own printed columns don't
+    # include a receipt->closing identity as clean as MARG's, so this family
+    # is left as opening/closing plausibility only until P1-P3 produce real
+    # data to re-verify against (doc1.jpg was read by eye, not cross-footed
+    # row-by-row the way doc2/doc6 were).
+    reconciliation:
+      formula: "opening_quantity + received_quantity - sales_quantity - sales_return_quantity = closing_quantity"
+      tolerance_abs: 0
+      confidence: provisional
+
+# Rule R4: rate coherence, applies whenever `rate` is present regardless of family.
+rate_coherence:
+  formula: "abs(quantity * rate - value) <= tolerance_pct * value / 100"
+  tolerance_pct: 0.5    # verified on doc6.jpg: 16*408.86=6541.76 exact; 72*250.47=18033.84 vs printed 18034.08 (~0.001%)

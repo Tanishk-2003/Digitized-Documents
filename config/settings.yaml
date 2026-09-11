@@ -1,0 +1,73 @@
+# Pipeline settings — paths, thresholds, feature flags.
+# Loaded by src/pharma_di/config.py at process start; every stage reads from the
+# loaded Settings object rather than hardcoding paths or thresholds.
+
+paths:
+  data_input: "data/input"
+  data_interim: "data/interim"
+  data_masters: "data/masters"
+  data_output: "data/output"
+  column_mappings: "config/column_mappings.yaml"
+  templates: "config/templates.yaml"
+  distributors: "config/distributors.yaml"
+  validation_rules: "config/validation_rules.yaml"
+
+# Section 0 of IMPLEMENTATION_PLAN.md: no LLM in the MVP. This is the one flag
+# that changes when a local LLM (Ollama/vLLM) is introduced post-MVP — no call
+# site should change, only this value (dictionary_resolver -> local_llm).
+semantic_mapping:
+  fallback: none          # none | local_llm  (none = ReviewQueueResolver)
+  fuzzy_accept_threshold: 90
+  fuzzy_review_threshold: 75   # 75-90: accept mapping but force row to needs_review
+
+preprocess:
+  # All geometric/illumination correction runs at this working resolution
+  # (longest side, px) rather than the full ~12MP camera resolution — OCR
+  # legibility doesn't need native camera resolution, and it keeps the
+  # per-document runtime in low single-digit seconds. The corrected image
+  # written for OCR is at this resolution, not upscaled back.
+  max_dimension_px: 2000
+  # See preprocess/boundary.py detect_boundary(): must stay high (all 6 real
+  # samples show the page filling 85%+ of the frame) or a strong inner
+  # contour (a ruled table's own border, on doc2.jpg) gets mistaken for the
+  # page boundary and silently crops out real content (found + fixed this
+  # session -- it was cropping out the entire distributor/company header).
+  boundary_min_area_frac: 0.6
+  illumination_kernel_frac: 0.10   # background-estimation kernel, as a fraction of working-image longest side
+  denoise_h: 7                     # fastNlMeansDenoising strength
+  adaptive_threshold_block_size: 35
+  adaptive_threshold_C: 15
+  dewarp_strip_count: 24           # vertical strips for content-adaptive curvature flattening
+  edge_band_frac: 0.012            # width of the edge band (frac of dimension) checked for page-truncation
+
+quality_gate:
+  min_blur_variance: 50.0       # variance of Laplacian; below this = too blurry for OCR
+  max_residual_skew_deg: 3.0
+  require_all_corners_in_frame: true
+  min_contrast_std: 20.0            # std-dev of pixel intensity; below this = washed out / low contrast
+  content_edge_density_threshold: 0.35   # ink-pixel fraction in an edge band that flags "content touches frame edge"
+
+validation:
+  rate_tolerance_pct: 0.5       # rule R4: abs(qty*rate - value) <= tolerance_pct% of value
+  totals_tolerance_abs: 0.01    # rule R2: cross-foot tolerance (rounding)
+
+ocr:
+  engine: paddleocr            # committed choice, CLAUDE.md Technology defaults
+  lang: en
+  min_token_confidence: 0.5    # below this, field-level extraction_confidence is capped
+  # See src/pharma_di/ocr/paddle_engine.py module docstring: this environment's
+  # PaddleOCR runs without oneDNN acceleration (a real, documented PIR/oneDNN
+  # compatibility bug, not a choice). Measured: cost is driven by per-detected
+  # -region recognition passes, not overall pixel count, so this is kept close
+  # to preprocess.max_dimension_px rather than pushed lower for a speedup that
+  # doesn't materialize -- revisit once the environment issue itself is fixed
+  # (Linux/WSL host, GPU, or an upstream Paddle fix).
+  max_dimension_px: 1800
+  cache_dir: "data/interim/ocr_cache"
+
+llm:
+  # Not used while semantic_mapping.fallback == none. Documented here so the
+  # seam is visible in one place. Never a hosted provider for this project.
+  provider: local_only         # ollama | vllm | tgi — never openai/groq/anthropic/etc.
+  endpoint: "http://localhost:11434"
+  model: null

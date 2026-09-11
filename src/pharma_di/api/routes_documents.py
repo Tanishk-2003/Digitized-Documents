@@ -1,0 +1,182 @@
+"""Document ingestion, job tracking, and retrieval routes (IMPLEMENTATION_PLAN.md P9)."""
+from __future__ import annotations
+
+from pathlib import Path
+import shutil
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from pharma_di.config import REPO_ROOT
+from pharma_di.export.excel import export_to_excel
+from pharma_di.persist.db import get_session
+from pharma_di.persist.models import Document, ReviewRecord, Transaction
+from pharma_di.persist.repository import load_canonical_rows
+from pharma_di.schemas.api import DocumentDetailResponse, DocumentSummaryResponse, JobResponse
+from pharma_di.workers.jobs import default_job_manager
+
+router = APIRouter(prefix="/api", tags=["documents"])
+
+_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".pdf"}
+
+
+def get_db():
+    session = get_session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@router.post(
+    "/documents/upload",
+    response_model=JobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Upload document for asynchronous pipeline processing",
+)
+async def upload_document(
+    file: UploadFile = File(...),
+    debug: bool = Query(default=False, description="Enable verbose pipeline debug trace"),
+) -> JobResponse:
+    ext = Path(file.filename or "upload.jpg").suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file format '{ext}'. Allowed extensions: {', '.join(_ALLOWED_EXTENSIONS)}",
+        )
+
+    upload_dir = REPO_ROOT / "data" / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    filename_clean = f"{Path(file.filename or 'doc').stem}_{uuid.uuid4().hex[:6]}{ext}"
+    dest_path = upload_dir / filename_clean
+
+    with dest_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    job = default_job_manager.submit_job(dest_path, debug=debug)
+    return job
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=JobResponse,
+    summary="Get background processing status of a document job",
+)
+async def get_job_status(job_id: str) -> JobResponse:
+    job = default_job_manager.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Job '{job_id}' not found")
+    return job
+
+
+@router.get(
+    "/jobs",
+    response_model=list[JobResponse],
+    summary="List all submitted processing jobs",
+)
+async def list_jobs() -> list[JobResponse]:
+    return default_job_manager.list_jobs()
+
+
+@router.get(
+    "/documents",
+    response_model=list[DocumentSummaryResponse],
+    summary="List all persisted documents",
+)
+async def list_documents(session: Session = Depends(get_db)) -> list[DocumentSummaryResponse]:
+    documents = session.query(Document).order_by(Document.created_at.desc()).all()
+    summaries: list[DocumentSummaryResponse] = []
+
+    for doc in documents:
+        total_rows = session.query(Transaction).filter(Transaction.document_id == doc.id).count()
+        needs_review_count = (
+            session.query(ReviewRecord)
+            .join(Transaction)
+            .filter(Transaction.document_id == doc.id, ReviewRecord.review_status == "needs_review")
+            .count()
+        )
+        summaries.append(
+            DocumentSummaryResponse(
+                document_id=doc.id,
+                distributor_id=doc.distributor_id,
+                distributor_name=doc.distributor_name,
+                company_name=doc.company_name,
+                statement_from=str(doc.statement_from) if doc.statement_from else None,
+                statement_to=str(doc.statement_to) if doc.statement_to else None,
+                document_type=doc.document_type,
+                source_file=doc.source_file,
+                page_number=doc.page_number,
+                page_count=doc.page_count,
+                row_count=total_rows,
+                needs_review_count=needs_review_count,
+            )
+        )
+    return summaries
+
+
+@router.get(
+    "/documents/{document_id}",
+    response_model=DocumentDetailResponse,
+    summary="Get canonical document records and all transaction rows",
+)
+async def get_document_detail(
+    document_id: str,
+    session: Session = Depends(get_db),
+) -> DocumentDetailResponse:
+    doc = session.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' not found in database",
+        )
+
+    canonical_rows = load_canonical_rows(session, document_id=document_id)
+    needs_review_count = sum(1 for r in canonical_rows if r.get("review_status") == "needs_review")
+
+    summary = DocumentSummaryResponse(
+        document_id=doc.id,
+        distributor_id=doc.distributor_id,
+        distributor_name=doc.distributor_name,
+        company_name=doc.company_name,
+        statement_from=str(doc.statement_from) if doc.statement_from else None,
+        statement_to=str(doc.statement_to) if doc.statement_to else None,
+        document_type=doc.document_type,
+        source_file=doc.source_file,
+        page_number=doc.page_number,
+        page_count=doc.page_count,
+        row_count=len(canonical_rows),
+        needs_review_count=needs_review_count,
+    )
+
+    return DocumentDetailResponse(document=summary, canonical_rows=canonical_rows)
+
+
+@router.get(
+    "/documents/{document_id}/export/excel",
+    summary="Download Excel spreadsheet matching the canonical Stock & Sale schema",
+)
+async def export_document_excel(
+    document_id: str,
+    session: Session = Depends(get_db),
+) -> FileResponse:
+    doc = session.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' not found in database",
+        )
+
+    out_dir = REPO_ROOT / "data" / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / f"{document_id}.xlsx"
+
+    export_to_excel(session, out_file, document_id=document_id)
+
+    return FileResponse(
+        path=out_file,
+        filename=f"{document_id}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

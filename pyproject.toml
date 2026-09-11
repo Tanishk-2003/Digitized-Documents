@@ -1,0 +1,49 @@
+[project]
+name = "pharma-di"
+version = "0.1.0"
+description = "Pharma Stock & Sale Statement Intelligence pipeline (local-only, no hosted OCR/LLM APIs)"
+requires-python = ">=3.11"
+readme = "CLAUDE.md"
+
+dependencies = [
+    "pydantic>=2",
+    "pyyaml",
+    "langgraph",
+    "rapidfuzz",
+    "pandas",
+    "openpyxl",
+    "pillow",
+    "sqlalchemy",
+    "fastapi",
+    "uvicorn",
+    "numpy",
+    # opencv-python-headless: this is a server/CLI pipeline, never cv2.imshow -
+    # headless avoids pulling in GUI (Qt/GTK) system dependencies for nothing.
+    "opencv-python-headless",
+    # Added in P2 (OCR): paddleocr (paddlepaddle installed and smoke-tested in P0)
+    # Added in P8 (Persist): alembic for schema migrations; pymysql as the
+    # MySQL DBAPI driver CLAUDE.md's tech defaults name. This dev/test
+    # environment persists to a local SQLite file by default (no MySQL
+    # credentials available to this session — see persist/db.py) — pymysql
+    # is still declared so the same code targets real MySQL the moment
+    # DATABASE_URL is pointed at one, with no further code changes.
+    "alembic",
+    "pymysql",
+    # Added in P9 (API + Worker): python-multipart for FastAPI file uploads
+    "python-multipart",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+paddle = ["paddlepaddle"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

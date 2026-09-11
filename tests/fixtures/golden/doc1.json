@@ -1,0 +1,12 @@
+{
+  "source_file": "doc1.jpg",
+  "distributor_name": "New Tripura Pharmaco",
+  "company_name": "Zorvia Healthcare Limited",
+  "statement_from": "2026-06-29",
+  "statement_to": "2026-07-29",
+  "document_type": "product_level",
+  "page_number": 1,
+  "page_count": 1,
+  "expected_line_item_count": 20,
+  "notes": "Borderless whitespace-aligned table. Splits returns into Market Return / Return Outward / Short Quantity (all read as 0 across every visible row) -- many-to-one into sales_return_quantity. Has a Stock Status column (UNSOLD / NDays). Ground truth transcribed by direct visual read during planning, not by OCR -- re-verify once P2 OCR runs."
+}

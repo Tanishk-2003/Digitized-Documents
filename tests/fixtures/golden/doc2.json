@@ -1,0 +1,12 @@
+{
+  "source_file": "doc2.jpg",
+  "distributor_name": "Nabin Drug Centre",
+  "company_name": "Eris Lifescience Limited (Pharma Division)",
+  "statement_from": "2026-07-01",
+  "statement_to": "2026-07-31",
+  "document_type": "product_level",
+  "page_number": 1,
+  "page_count": 2,
+  "expected_line_item_count": 12,
+  "notes": "Fully ruled grid, has HSN Code per row. Page explicitly prints 'Page No : 1/2'. DISCREPANCY vs CLAUDE.md's own summary table: CLAUDE.md lists the Nabin *summary* row before the *per-product (page 2)* row, which reads as summary=page1/product=page2 -- but the pixel evidence on this photograph is the per-product table self-labeled page 1 of 2, and doc3.jpg (the value-only summary) is therefore page 2. Flagged, not silently resolved either way -- confirm with the user before P4 hardcodes an assumption."
+}

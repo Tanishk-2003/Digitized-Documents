@@ -1,0 +1,110 @@
+# ==============================================================================
+# Pharma Stock & Sale Statement Intelligence — .gitignore
+# ==============================================================================
+
+# --- Python & Virtual Environments -------------------------------------------
+digitize_document/
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# Packaging & distribution
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing, coverage & linters
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node.js & React UI (ui/) ------------------------------------------------
+ui/node_modules/
+ui/dist/
+ui/.vite/
+ui/dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# --- Data Directory (Privacy, Runtime Artifacts & Databases) -----------------
+# Keep structure and sample input/masters, but ignore runtime generated artifacts
+data/interim/*
+!data/interim/.gitkeep
+
+data/uploads/*
+!data/uploads/.gitkeep
+
+data/output/*
+!data/output/.gitkeep
+
+# Ignore debug preprocessed images in input directory
+data/input/*.preprocessed.png
+
+# OCR caches & SQLite databases
+ocr_cache/
+**/ocr_cache/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Logs, Environment & Secrets ---------------------------------------------
+*.log
+.env
+.env.*
+!.env.example
+
+# --- IDE & OS Specific -------------------------------------------------------
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Stray scratch files -----------------------------------------------------
+-

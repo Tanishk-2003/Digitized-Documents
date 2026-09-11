@@ -1,0 +1,12 @@
+{
+  "source_file": "doc4.jpg",
+  "distributor_name": "Mediland",
+  "company_name": "Zorvia Healthcare Limited (ZFORCE 1) (ZH)",
+  "statement_from": "2026-06-29",
+  "statement_to": "2026-07-29",
+  "document_type": "product_level",
+  "page_number": 1,
+  "page_count": 1,
+  "expected_line_item_count": 19,
+  "notes": "Borderless MARG-template table (see doc5/doc6 -- same ERP). Has RATE and DUMP{QTY, M.EXP} columns. '-' used as the null/zero marker in RECEIPT for rows with no receipts. Contains one section-header row inside the body ('ZORVIA HEALTHCARE LIMITED(ZFORCE 1)(ZH)') with no numeric cells -- must not become a product row. Hand-verified: RATE x OPENING QTY == OPENING VALUE for every row (rule R4 seed evidence)."
+}
