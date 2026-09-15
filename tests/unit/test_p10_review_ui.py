@@ -10,8 +10,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from pharma_di.api import routes_review as routes_review_module
 from pharma_di.api.app import create_app
 from pharma_di.api.routes_documents import get_db
+from pharma_di.config import load_settings
+from pharma_di.mapping.update import add_column_alias
 from pharma_di.persist.db import get_engine
 from pharma_di.persist.models import Base
 from pharma_di.persist.repository import save_document
@@ -35,7 +38,27 @@ def test_db(tmp_path: Path) -> Session:
 
 
 @pytest.fixture()
-def client(test_db: Session) -> TestClient:
+def isolated_column_mappings_path(tmp_path, monkeypatch) -> Path:
+    """P11: see tests/unit/test_api.py's fixture of the same name for the
+    full finding — the real /api/review/{id}/correct route writes straight
+    into the real, committed config/column_mappings.yaml with no isolation
+    otherwise. This file's own correction test (test_correct_promotes_alias_
+    and_returns_promoted_list) hits that same route with a fake header
+    ("P10_TEST_HDR"), which is exactly how that literal string ended up
+    committed in the real file before this fix."""
+    real_path = load_settings().resolve_path("column_mappings")
+    tmp_mappings_path = tmp_path / "column_mappings.yaml"
+    tmp_mappings_path.write_text(real_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    def _isolated_add_column_alias(canonical_field: str, alias: str, mappings_file=None) -> bool:
+        return add_column_alias(canonical_field, alias, mappings_file=tmp_mappings_path)
+
+    monkeypatch.setattr(routes_review_module, "add_column_alias", _isolated_add_column_alias)
+    return tmp_mappings_path
+
+
+@pytest.fixture()
+def client(test_db: Session, isolated_column_mappings_path: Path) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_db] = lambda: test_db
     with TestClient(app) as c:

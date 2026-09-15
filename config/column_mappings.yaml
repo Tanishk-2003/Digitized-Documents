@@ -24,7 +24,6 @@ opening_quantity:
   - opening qty
   - op stock
   - open qty.
-  - new_custom_hdr
 opening_value:
   paths:
   - - opening
@@ -100,7 +99,6 @@ closing_quantity:
   aliases:
   - closing stock
   - clos qty
-  - p10_test_hdr
 closing_value:
   paths:
   - - closing
