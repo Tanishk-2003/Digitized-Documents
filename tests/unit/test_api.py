@@ -5,13 +5,16 @@ import io
 import time
 from pathlib import Path
 
+import yaml
 from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy.orm import Session
 
+from pharma_di.api import routes_review as routes_review_module
 from pharma_di.api.app import create_app
 from pharma_di.api.routes_documents import get_db
-from pharma_di.config import clear_config_cache, load_column_mappings
+from pharma_di.config import load_settings
+from pharma_di.mapping.update import add_column_alias
 from pharma_di.persist.db import get_engine
 from pharma_di.persist.models import Base, Correction, Document, Product, ReviewRecord, Transaction
 from pharma_di.persist.repository import save_document
@@ -36,7 +39,33 @@ def test_db_session(tmp_path) -> Session:
 
 
 @pytest.fixture()
-def client(test_db_session: Session) -> TestClient:
+def isolated_column_mappings_path(tmp_path, monkeypatch) -> Path:
+    """P11: the real /api/review/{id}/correct route promotes a confirmed
+    alias straight into config/column_mappings.yaml (mapping/update.py::
+    add_column_alias, called with its default mappings_file=None, which
+    resolves to the real repo file). Found this session: with no isolation,
+    every test run through this route permanently wrote a fake alias into
+    the real, committed dictionary — confirmed two such aliases (
+    "new_custom_hdr", "p10_test_hdr") were already sitting in the real file
+    as a result. add_column_alias() is imported by name into routes_review.py
+    (`from pharma_di.mapping.update import add_column_alias`), so patching
+    config.load_settings alone wouldn't reach that call site — monkeypatching
+    the name where it's actually called (routes_review_module.add_column_alias)
+    to always target this tmp copy is the direct fix, not a `load_settings`
+    chase across every module that imports it."""
+    real_path = load_settings().resolve_path("column_mappings")
+    tmp_mappings_path = tmp_path / "column_mappings.yaml"
+    tmp_mappings_path.write_text(real_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    def _isolated_add_column_alias(canonical_field: str, alias: str, mappings_file=None) -> bool:
+        return add_column_alias(canonical_field, alias, mappings_file=tmp_mappings_path)
+
+    monkeypatch.setattr(routes_review_module, "add_column_alias", _isolated_add_column_alias)
+    return tmp_mappings_path
+
+
+@pytest.fixture()
+def client(test_db_session: Session, isolated_column_mappings_path: Path) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_db] = lambda: test_db_session
     with TestClient(app) as test_client:
@@ -207,7 +236,9 @@ def test_approve_document_endpoint(client: TestClient, test_db_session: Session)
     assert rev.review_status == "approved"
 
 
-def test_correct_document_endpoint(client: TestClient, test_db_session: Session, tmp_path: Path):
+def test_correct_document_endpoint(
+    client: TestClient, test_db_session: Session, tmp_path: Path, isolated_column_mappings_path: Path
+):
     _seed_sample_doc(test_db_session, document_id="doc-correct-1", review_status=ReviewStatus.needs_review)
     txn = test_db_session.query(Transaction).filter(Transaction.document_id == "doc-correct-1").first()
 
@@ -241,6 +272,9 @@ def test_correct_document_endpoint(client: TestClient, test_db_session: Session,
     rev = test_db_session.query(ReviewRecord).filter(ReviewRecord.transaction_id == txn.id).first()
     assert rev.review_status == "human_corrected"
 
-    # Verify column mapping alias was promoted
-    mappings = load_column_mappings()
+    # Verify column mapping alias was promoted — read the isolated tmp copy
+    # directly (not load_column_mappings(), which would read the real repo
+    # file this fixture deliberately keeps untouched; see
+    # isolated_column_mappings_path's own docstring).
+    mappings = yaml.safe_load(isolated_column_mappings_path.read_text(encoding="utf-8"))
     assert "new_custom_hdr" in [a.lower() for a in mappings.get("opening_quantity", {}).get("aliases", [])]
