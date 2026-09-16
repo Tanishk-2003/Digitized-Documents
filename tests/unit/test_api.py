@@ -27,6 +27,7 @@ from pharma_di.schemas.canonical import (
     TransactionRecord,
 )
 from pharma_di.schemas.validation import RowValidationResult
+from pharma_di.workers import jobs as jobs_module
 from pharma_di.workers.jobs import JobManager, JobStatus
 
 
@@ -145,6 +146,42 @@ def test_job_manager_lifecycle(tmp_path: Path):
     manager.shutdown(wait=False)
 
 
+def test_job_manager_marks_a_completed_run_with_recorded_errors_as_failed(monkeypatch, tmp_path: Path):
+    """P16: workers/jobs.py::_run_job used to set job.status to
+    JobStatus.completed on EITHER side of a
+    `JobStatus.completed if not final_state.errors else JobStatus.completed`
+    ternary — a dead branch that could never actually mark a job failed once
+    the graph itself ran to completion, no matter what final_state.errors
+    held. Verified here by stubbing compiled_graph() so the pipeline itself
+    isn't exercised — this is a unit test of JobManager's own status logic,
+    not of what makes the real pipeline record an error."""
+
+    class _FakeGraph:
+        def invoke(self, state):
+            return {"source_file": state.source_file, "document_id": state.document_id, "errors": ["boom"]}
+
+    monkeypatch.setattr(jobs_module, "compiled_graph", lambda: _FakeGraph())
+
+    manager = JobManager(max_workers=1)
+    dummy_file = tmp_path / "test.jpg"
+    dummy_file.write_bytes(b"not a real image, never reaches OCR since compiled_graph is stubbed")
+
+    job = manager.submit_job(dummy_file, document_id="test-doc-errors")
+
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        current = manager.get_job(job.job_id)
+        if current.status != JobStatus.queued and current.status != JobStatus.processing:
+            break
+        time.sleep(0.05)
+
+    final = manager.get_job(job.job_id)
+    assert final.errors == ["boom"]
+    assert final.status == JobStatus.failed
+
+    manager.shutdown(wait=False)
+
+
 def test_upload_document_returns_accepted(client: TestClient, tmp_path: Path):
     img_buf = io.BytesIO()
     Image.new("RGB", (100, 100), color=(255, 255, 255)).save(img_buf, format="JPEG")
@@ -209,6 +246,63 @@ def test_export_document_excel_endpoint(client: TestClient, test_db_session: Ses
     assert len(resp.content) > 0
 
 
+def test_export_document_final_output_endpoint(client: TestClient, test_db_session: Session):
+    _seed_sample_doc(test_db_session, document_id="doc-final-1")
+
+    resp = client.get("/api/documents/doc-final-1/export/final")
+    assert resp.status_code == 200
+    assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in resp.headers["content-type"]
+    assert len(resp.content) > 0
+
+
+def test_export_document_final_output_endpoint_404s_for_unknown_document(client: TestClient):
+    resp = client.get("/api/documents/does-not-exist/export/final")
+    assert resp.status_code == 404
+
+
+def test_export_all_final_output_endpoint(client: TestClient, test_db_session: Session):
+    _seed_sample_doc(test_db_session, document_id="doc-final-a")
+    _seed_sample_doc(test_db_session, document_id="doc-final-b")
+
+    resp = client.get("/api/export/final")
+    assert resp.status_code == 200
+    assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in resp.headers["content-type"]
+    assert len(resp.content) > 0
+
+
+def test_list_final_output_endpoint_returns_all_rows_across_documents(client: TestClient, test_db_session: Session):
+    """P16: the JSON counterpart to /export/final — the same rows, as data,
+    for the new final-output table view (the export routes only ever
+    returned .xlsx files; nothing returned this data as JSON before)."""
+    _seed_sample_doc(test_db_session, document_id="doc-list-final-a")
+    _seed_sample_doc(test_db_session, document_id="doc-list-final-b")
+
+    resp = client.get("/api/final-output")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert {row["file_name"] for row in data} == {"doc6.jpg"}
+    row = data[0]
+    assert set(row.keys()) == {
+        "id", "stockist_distributor_name", "address", "product_name",
+        "opening_qty", "closing_qty", "dump_qty", "scan_date", "file_name",
+        "scan_by", "update_by", "updated_on",
+    }
+    assert row["product_name"] == "COSKLOT REG TAB."
+    assert row["opening_qty"] == 16.0
+
+
+def test_list_final_output_endpoint_filters_by_document_id(client: TestClient, test_db_session: Session):
+    _seed_sample_doc(test_db_session, document_id="doc-list-final-c")
+    _seed_sample_doc(test_db_session, document_id="doc-list-final-d")
+
+    resp = client.get("/api/final-output", params={"document_id": "doc-list-final-c"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["file_name"] == "doc6.jpg"
+
+
 def test_review_queue_endpoint(client: TestClient, test_db_session: Session):
     _seed_sample_doc(test_db_session, document_id="doc-review-1", review_status=ReviewStatus.needs_review)
 
@@ -231,9 +325,16 @@ def test_approve_document_endpoint(client: TestClient, test_db_session: Session)
     assert data["status"] == "approved"
     assert data["updated_rows"] == 1
 
-    # Verify review record in DB updated
+    # Verify review record in DB updated. P16: the stored review_status now
+    # correctly lands on a real ReviewStatus enum member (human_corrected —
+    # the closest fit for "a human acted on this row", since the canonical
+    # schema's own closed enum has no distinct "approved without change"
+    # state) instead of the literal string "approved", which was never a
+    # valid member and would fail validation anywhere this field gets
+    # re-parsed as ReviewStatus. The response envelope's own status="approved"
+    # is a separate, free-form field and is untouched by this fix.
     rev = test_db_session.query(ReviewRecord).join(Transaction).filter(Transaction.document_id == "doc-approve-1").first()
-    assert rev.review_status == "approved"
+    assert rev.review_status == ReviewStatus.human_corrected.value
 
 
 def test_correct_document_endpoint(
@@ -271,6 +372,12 @@ def test_correct_document_endpoint(
     # Check updated review status
     rev = test_db_session.query(ReviewRecord).filter(ReviewRecord.transaction_id == txn.id).first()
     assert rev.review_status == "human_corrected"
+
+    # P14: the uniform final output table should say a human touched this
+    # row too, not just the Correction audit log / review_status.
+    test_db_session.refresh(txn)
+    assert txn.final_output.update_by == "human_reviewer"
+    assert txn.final_output.updated_on is not None
 
     # Verify column mapping alias was promoted — read the isolated tmp copy
     # directly (not load_column_mappings(), which would read the real repo

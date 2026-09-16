@@ -90,7 +90,7 @@ class JobManager:
             final_state = PipelineState.model_validate(result)
 
             with self._lock:
-                job.status = JobStatus.completed if not final_state.errors else JobStatus.completed
+                job.status = JobStatus.completed if not final_state.errors else JobStatus.failed
                 job.progress_stage = "completed"
                 job.trace = final_state.trace
                 job.errors = final_state.errors

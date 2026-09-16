@@ -2,11 +2,22 @@
 corrections tables (IMPLEMENTATION_PLAN.md P8; CLAUDE.md's Level 1/2/3 data
 model and "MySQL schema (3 levels + review + corrections tables)").
 
-Written against SQLAlchemy's generic column types (String, Integer, Float,
+Written against SQLAlchemy's generic column types (String, Integer, Double,
 Date, DateTime, JSON) rather than any MySQL-specific dialect types, so the
 identical model definitions and generated Alembic migrations work against
 either backend this project targets — see persist/db.py for which one a
 given run actually connects to.
+
+P15 (real MySQL verification): every quantity/value/rate column uses
+Double, not SQLAlchemy's Float. Confirmed directly against a real MySQL
+instance, not assumed: Float compiles to MySQL's genuinely single-precision
+FLOAT (~7 significant digits), which silently rounded a real doc3.jpg value
+(opening_value 109599.61) to 109600.0 on write. SQLite never exposed this —
+it stores any declared floating-point column as full 8-byte double
+precision regardless of the declared type affinity, so the same code and
+the same value round-tripped exactly there. Double compiles to MySQL's
+DOUBLE (8-byte, ~15-17 significant digits), which comfortably holds every
+value this pipeline handles, while remaining a no-op change for SQLite.
 
 The canonical Stock & Sale schema (CanonicalRow) is NOT its own stored
 table here: CLAUDE.md describes it as "a join view across these three
@@ -19,7 +30,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Date, DateTime, Double, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -72,7 +83,7 @@ class Product(Base):
     product_name_raw: Mapped[str] = mapped_column(String(255), nullable=False)
     hsn_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pack: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rate: Mapped[float | None] = mapped_column(Double, nullable=True)
 
     document: Mapped[Document] = relationship(back_populates="products")
     transaction: Mapped["Transaction | None"] = relationship(back_populates="product", uselist=False)
@@ -97,26 +108,30 @@ class Transaction(Base):
     document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
     product_row_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True, unique=True)
 
-    opening_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    opening_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    received_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    received_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    free_received_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    sales_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    free_sales_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    sales_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    sales_return_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    purchase_return_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    expired_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    closing_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    closing_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    opening_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    opening_value: Mapped[float | None] = mapped_column(Double, nullable=True)
+    received_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    received_value: Mapped[float | None] = mapped_column(Double, nullable=True)
+    free_received_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    sales_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    free_sales_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    sales_value: Mapped[float | None] = mapped_column(Double, nullable=True)
+    sales_return_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    purchase_return_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    expired_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    closing_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    closing_value: Mapped[float | None] = mapped_column(Double, nullable=True)
+    dump_qty: Mapped[float | None] = mapped_column(Double, nullable=True)  # P14: resolves open decision D2
     stock_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    months_to_expiry: Mapped[float | None] = mapped_column(Float, nullable=True)
+    months_to_expiry: Mapped[float | None] = mapped_column(Double, nullable=True)
 
     document: Mapped[Document] = relationship(back_populates="transactions")
     product: Mapped[Product | None] = relationship(back_populates="transaction")
     review: Mapped["ReviewRecord | None"] = relationship(back_populates="transaction", uselist=False, cascade="all, delete-orphan")
     corrections: Mapped[list["Correction"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
+    final_output: Mapped["FinalOutput | None"] = relationship(
+        back_populates="transaction", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class ReviewRecord(Base):
@@ -154,11 +169,11 @@ class ReviewRecord(Base):
 class Correction(Base):
     """A human's correction to one extracted field (CLAUDE.md: "Every
     correction is retained — it becomes future mapping-dictionary entries
-    and, longer-term, evaluation data"). The schema exists from P8 on; no
-    write path populates it yet — that's the review UI's job (P10), not
-    built in this MVP. Left empty until then is the correct state, not a
-    bug: section 4.8/P10's own review-and-confirm workflow is what's
-    supposed to fill this in, and there's nothing to write without it.
+    and, longer-term, evaluation data"). Schema defined in P8; the write
+    path is `api/routes_review.py::correct_document` (P10) — every
+    row-level correction submitted through the review UI's feedback loop
+    lands here, `corrected_by` currently always the literal string
+    "human_reviewer" (no per-user identity exists in this MVP).
     """
 
     __tablename__ = "corrections"
@@ -172,3 +187,40 @@ class Correction(Base):
     corrected_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
     transaction: Mapped[Transaction] = relationship(back_populates="corrections")
+
+
+class FinalOutput(Base):
+    """The uniform final output table (IMPLEMENTATION_PLAN.md P14,
+    schemas/final_output.py::FinalStockSaleRow — see that module's own
+    docstring for the full field-sourcing reasoning and mapping-choice
+    caveats). One row per Transaction, same 1:1 shape as ReviewRecord.
+
+    A real, stored, mutable table — not a computed-on-read view like
+    CanonicalRow — deliberately: `update_by`/`updated_on` only make sense
+    for a row that persists across a later correction, the same reasoning
+    ReviewRecord/Correction already establish for this schema. Populated
+    by persist/repository.py::save_document alongside every other Level
+    1-3 table; `updated_on` is the first column in this schema to use
+    `onupdate=` (nothing before P14 tracked a true "last modified" time —
+    every other timestamp column here is insert-only `default=`).
+    """
+
+    __tablename__ = "final_output"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), nullable=False, unique=True)
+    stockist_distributor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opening_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    closing_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    dump_qty: Mapped[float | None] = mapped_column(Double, nullable=True)
+    scan_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    file_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    scan_by: Mapped[str] = mapped_column(String(255), nullable=False, default="system")
+    update_by: Mapped[str] = mapped_column(String(255), nullable=False, default="system")
+    updated_on: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False
+    )
+
+    transaction: Mapped[Transaction] = relationship(back_populates="final_output")

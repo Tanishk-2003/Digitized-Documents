@@ -31,6 +31,10 @@ dependencies = [
     "pymysql",
     # Added in P9 (API + Worker): python-multipart for FastAPI file uploads
     "python-multipart",
+    # Added in P15 (real MySQL verification): python-dotenv, so DATABASE_URL
+    # can live in a git-ignored local .env file instead of a permanent OS
+    # environment variable. See persist/db.py's docstring and .env.example.
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]

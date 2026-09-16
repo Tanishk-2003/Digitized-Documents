@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { getDocument, approveDocument, correctDocument } from "../api";
 import ConfBar from "../components/ConfBar";
 import StatusBadge from "../components/StatusBadge";
+import Icon from "../components/Icon";
+import { useToast } from "../components/Toast";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -102,7 +104,7 @@ function RowCorrectPanel({ row, onSave, onCancel }) {
         );
       })}
       <div className="flex gap-2 mt-3">
-        <button className="btn btn-success btn-sm" onClick={save}>Save Corrections</button>
+        <button className="btn btn-success btn-sm" onClick={save}><Icon name="check" size={13} />Save Corrections</button>
         <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -121,12 +123,12 @@ export default function DocumentReviewPage({ documentId, onBack }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [successMsg, setSuccessMsg] = useState(null);
   const [correctingRowIdx, setCorrectingRowIdx] = useState(null);
   const [pendingCorrections, setPendingCorrections] = useState([]); // accumulated row corrections
   const [pendingMappings, setPendingMappings] = useState([]); // column alias corrections
   const [approving, setApproving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const showToast = useToast();
 
   const load = () => {
     setLoading(true);
@@ -141,10 +143,9 @@ export default function DocumentReviewPage({ documentId, onBack }) {
   const handleApproveAll = async () => {
     setApproving(true);
     setError(null);
-    setSuccessMsg(null);
     try {
       const res = await approveDocument(documentId, "Approved via UI");
-      setSuccessMsg(`✅ ${res.updated_rows} rows marked as approved.`);
+      showToast(`${res.updated_rows} row${res.updated_rows === 1 ? "" : "s"} marked as approved`);
       load();
     } catch (e) {
       setError(e.message);
@@ -161,18 +162,17 @@ export default function DocumentReviewPage({ documentId, onBack }) {
   const handleSubmitAll = async () => {
     setSubmitting(true);
     setError(null);
-    setSuccessMsg(null);
     try {
       const res = await correctDocument(documentId, {
         columnMappings: pendingMappings,
         rowCorrections: pendingCorrections,
       });
       const parts = [];
-      if (res.updated_rows) parts.push(`${res.updated_rows} row corrections saved`);
+      if (res.updated_rows) parts.push(`${res.updated_rows} row correction(s) saved`);
       if (res.promoted_mappings?.length) {
-        parts.push(`${res.promoted_mappings.length} column alias(es) promoted to column_mappings.yaml`);
+        parts.push(`${res.promoted_mappings.length} column alias(es) promoted`);
       }
-      setSuccessMsg(`✅ ${parts.join(" · ")}`);
+      showToast(parts.join(" · ") || "Corrections saved");
       setPendingCorrections([]);
       setPendingMappings([]);
       load();
@@ -184,7 +184,7 @@ export default function DocumentReviewPage({ documentId, onBack }) {
   };
 
   if (loading) return <div className="flex items-center gap-2 mt-4"><span className="spinner" /> Loading document…</div>;
-  if (error && !detail) return <div className="alert alert-error">{error}</div>;
+  if (error && !detail) return <div className="alert alert-error"><Icon name="alertTriangle" size={16} />{error}</div>;
   if (!detail) return null;
 
   const { document: doc, canonical_rows: rows } = detail;
@@ -196,14 +196,14 @@ export default function DocumentReviewPage({ documentId, onBack }) {
     <div>
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
-        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
+        <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrowLeft" size={14} />Back</button>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontSize: 17, fontWeight: 700 }}>
             {doc.distributor_name ?? "Unknown Distributor"}
             {doc.company_name && <span style={{ fontWeight: 400, color: "var(--muted)" }}> / {doc.company_name}</span>}
           </h2>
           <div className="text-sm text-muted">
-            {doc.statement_from && <span>📅 {doc.statement_from} → {doc.statement_to} · </span>}
+            {doc.statement_from && <span>{doc.statement_from} → {doc.statement_to} · </span>}
             {doc.row_count} rows · {doc.needs_review_count} flagged
           </div>
         </div>
@@ -214,6 +214,7 @@ export default function DocumentReviewPage({ documentId, onBack }) {
               onClick={handleSubmitAll}
               disabled={submitting}
             >
+              {submitting && <span className="spinner" />}
               {submitting ? "Saving…" : `Submit Corrections (${pendingCorrections.length})`}
             </button>
           )}
@@ -222,23 +223,24 @@ export default function DocumentReviewPage({ documentId, onBack }) {
             onClick={handleApproveAll}
             disabled={approving}
           >
-            {approving ? "Approving…" : "Approve All ✓"}
+            {approving ? <span className="spinner" /> : <Icon name="check" size={14} />}
+            {approving ? "Approving…" : "Approve All"}
           </button>
         </div>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {successMsg && <div className="alert alert-success">{successMsg}</div>}
+      {error && <div className="alert alert-error"><Icon name="alertTriangle" size={16} />{error}</div>}
 
       {pendingCorrections.length > 0 && (
-        <div className="alert" style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1e40af" }}>
-          🖊 {pendingCorrections.length} unsaved correction(s). Click "Submit Corrections" to persist and promote column aliases.
+        <div className="alert alert-info">
+          <Icon name="edit" size={15} />
+          {pendingCorrections.length} unsaved correction(s). Click "Submit Corrections" to persist and promote column aliases.
         </div>
       )}
 
       <div className="review-split">
         {/* LEFT: Source document image */}
-        <div className="card" style={{ position: "sticky", top: 72, alignSelf: "flex-start" }}>
+        <div className="card" style={{ position: "sticky", top: 20, alignSelf: "flex-start" }}>
           <div className="section-title">Source Document</div>
           {imgSrc ? (
             <img
@@ -247,21 +249,13 @@ export default function DocumentReviewPage({ documentId, onBack }) {
               className="doc-image"
               onError={(e) => {
                 e.target.style.display = "none";
-                e.target.nextSibling.style.display = "block";
+                e.target.nextSibling.style.display = "flex";
               }}
             />
           ) : null}
-          <div
-            style={{
-              display: imgSrc ? "none" : "block",
-              textAlign: "center",
-              padding: 32,
-              color: "var(--muted)",
-              background: "#f9fafb",
-              borderRadius: "var(--radius)",
-            }}
-          >
-            📄 Image not available
+          <div className="doc-image-empty flex-col items-center" style={{ display: imgSrc ? "none" : "flex" }}>
+            <Icon name="image" size={28} style={{ marginBottom: 8 }} />
+            Image not available
             {doc.source_file && (
               <div className="text-sm mt-1 font-mono">{doc.source_file}</div>
             )}
@@ -288,21 +282,11 @@ export default function DocumentReviewPage({ documentId, onBack }) {
               const isCorrectingThis = correctingRowIdx === idx;
 
               return (
-                <div
-                  key={idx}
-                  style={{
-                    border: "1px solid",
-                    borderColor: isFlagged ? "#fbbf24" : "var(--border)",
-                    borderRadius: "var(--radius)",
-                    padding: 14,
-                    marginBottom: 10,
-                    background: isFlagged ? "#fffbeb" : "var(--surface)",
-                  }}
-                >
+                <div key={idx} className={`row-card${isFlagged ? " flagged" : ""}`}>
                   {/* Row header */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <span style={{ fontWeight: 700 }}>
+                      <span className="row-card-title">
                         {row.product_name_raw ?? `Row ${idx + 1}`}
                       </span>
                       {row.hsn_code && (
@@ -323,7 +307,7 @@ export default function DocumentReviewPage({ documentId, onBack }) {
                           className="btn btn-ghost btn-sm"
                           onClick={() => setCorrectingRowIdx(idx)}
                         >
-                          Correct
+                          <Icon name="edit" size={12} />Correct
                         </button>
                       )}
                     </div>
@@ -331,8 +315,9 @@ export default function DocumentReviewPage({ documentId, onBack }) {
 
                   {/* Review reasons */}
                   {isFlagged && row.review_reasons?.length > 0 && (
-                    <div className="reasons mt-1 text-sm">
-                      ⚠ {Array.isArray(row.review_reasons) ? row.review_reasons.join(" · ") : row.review_reasons}
+                    <div className="reasons mt-1 text-sm flex items-start gap-2">
+                      <Icon name="alertTriangle" size={12} style={{ marginTop: 2, flexShrink: 0 }} />
+                      <span>{Array.isArray(row.review_reasons) ? row.review_reasons.join(" · ") : row.review_reasons}</span>
                     </div>
                   )}
 
@@ -347,7 +332,7 @@ export default function DocumentReviewPage({ documentId, onBack }) {
 
                   {/* Confidence bars for key numeric fields */}
                   {!isCorrectingThis && (
-                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+                    <div className="row-card-field-grid">
                       {TRANSACTION_FIELDS.filter((k) => row[k] != null || NUMERIC_FIELDS.has(k)).map((key) => {
                         const val = row[key];
                         if (val == null) return null;
@@ -358,13 +343,9 @@ export default function DocumentReviewPage({ documentId, onBack }) {
                             ? row.extraction_confidence[key]
                             : null;
                         return (
-                          <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ width: 130, fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>
-                              {fieldLabel(key)}
-                            </span>
-                            <span style={{ width: 80, fontSize: 12, fontFamily: "monospace", flexShrink: 0 }}>
-                              {String(val)}
-                            </span>
+                          <div key={key} className="row-card-field">
+                            <span className="row-card-field-label">{fieldLabel(key)}</span>
+                            <span className="row-card-field-val">{String(val)}</span>
                             {conf != null ? (
                               <ConfBar score={conf} />
                             ) : (
@@ -428,9 +409,9 @@ function UnmappedColumnPanel({ rows, onAddMapping }) {
   if (headers.size === 0) return null;
 
   return (
-    <div className="card" style={{ borderColor: "var(--warning)" }}>
-      <div className="section-title" style={{ color: "var(--warning)" }}>
-        ⚠ Unresolved Columns — map them to canonical fields
+    <div className="card" style={{ borderColor: "var(--warning-border)" }}>
+      <div className="section-title flex items-center gap-2" style={{ color: "var(--warning)" }}>
+        <Icon name="alertTriangle" size={13} />Unresolved Columns — map them to canonical fields
       </div>
       <p className="text-sm text-muted mb-4">
         These column headers were not recognized by the mapping dictionary. Select the correct canonical
@@ -456,7 +437,7 @@ function UnmappedColumnPanel({ rows, onAddMapping }) {
             onClick={() => promote(header)}
             style={{ marginLeft: 8 }}
           >
-            {added.has(header) ? "✓ Queued" : "Promote"}
+            {added.has(header) ? <><Icon name="check" size={12} />Queued</> : "Promote"}
           </button>
         </div>
       ))}

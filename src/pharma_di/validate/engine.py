@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from pharma_di.assemble.canonical import LEVEL3_CANONICAL_FIELDS
 from pharma_di.schemas.canonical import CanonicalRow, ReviewStatus
 from pharma_di.schemas.layout import Region, RegionType, TableGrid
 from pharma_di.schemas.mapping import ColumnMapping
@@ -31,12 +32,10 @@ from pharma_di.validate import reconcile as reconcile_module
 from pharma_di.validate import rules as rules_module
 from pharma_di.validate import totals as totals_module
 
-_LEVEL3_FIELD_NAMES = [
-    "opening_quantity", "opening_value", "received_quantity", "received_value",
-    "free_received_quantity", "sales_quantity", "sales_value", "free_sales_quantity",
-    "sales_return_quantity", "purchase_return_quantity", "expired_quantity",
-    "closing_quantity", "closing_value", "months_to_expiry",
-]
+# Derived from assemble/canonical.py's own LEVEL3_CANONICAL_FIELDS (P14 —
+# see validate/rules.py::_SIGNED_FIELDS's own comment for why this used to
+# be a second, independently hand-maintained copy of the same list).
+_LEVEL3_FIELD_NAMES = [f for f in LEVEL3_CANONICAL_FIELDS if f != "stock_status"]
 # R4 checks ONLY the opening pair, not all four qty/value pairs — checked
 # against real doc6.jpg data before shipping, not assumed: CLAUDE.md's own
 # finding #4 hand-verifies rate coherence exclusively on opening-stock
@@ -110,13 +109,21 @@ def validate_document(
     rate_tolerance_pct: float,
     totals_tolerance_abs: float,
     min_field_confidence: float,
+    derived_received_aliases: list[str] | None = None,
+    derived_sold_aliases: list[str] | None = None,
 ) -> tuple[list[RowValidationResult], list[CanonicalRow]]:
     """Returns (validation_results, updated_canonical_rows) — the rows come
     back with review_status/review_reasons set from the rule outcomes
     (auto_accepted only when every applicable rule passed, per section 4.7:
     "review_status = auto_accepted only when every applicable rule passes.
     Any failure produces needs_review with a machine-readable reason;
-    nothing is ever dropped")."""
+    nothing is ever dropped").
+
+    `derived_received_aliases`/`derived_sold_aliases` (P12) default to
+    validate/derived.py's own table when omitted — the real pipeline
+    (graph/nodes.py::validate) passes config/column_mappings.yaml's
+    derived_check_only.received_sold_groups instead, same config-driven
+    reasoning as mapping/resolver.py's thresholds/abbreviations."""
     if not canonical_rows:
         return [], []
 
@@ -140,7 +147,12 @@ def validate_document(
                 rule_results.append(r1)
 
         rule_results.extend(
-            derived_module.check_derived_columns(row.source_field_breakdown.get("derived_check_only", {}), values)
+            derived_module.check_derived_columns(
+                row.source_field_breakdown.get("derived_check_only", {}),
+                values,
+                received_aliases=derived_received_aliases,
+                sold_aliases=derived_sold_aliases,
+            )
         )
 
         if row.rate is not None:

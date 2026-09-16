@@ -9,11 +9,12 @@ import pandas as pd
 import pytest
 from sqlalchemy.orm import Session
 
-from pharma_di.export.excel import CANONICAL_COLUMNS, export_to_excel
+from pharma_di.export.excel import CANONICAL_COLUMNS, FINAL_OUTPUT_COLUMNS, export_final_output_to_excel, export_to_excel
 from pharma_di.persist.db import get_engine
 from pharma_di.persist.models import Base
 from pharma_di.persist.repository import save_document
 from pharma_di.schemas.canonical import CanonicalRow, DocumentRecord, DocumentType, ProductRecord, ReviewStatus, TransactionRecord
+from pharma_di.schemas.final_output import FinalStockSaleRow
 from pharma_di.schemas.validation import RowValidationResult
 
 
@@ -28,7 +29,8 @@ def session(tmp_path) -> Session:
 def _seed_one_row(session, document_id="doc6-test"):
     document_record = DocumentRecord(
         document_id=document_id,
-        distributor_name="Marg Pharma Distributor",
+        distributor_id="medico-drug-agency",  # real config/distributors.yaml entry
+        distributor_name="Medico Drug Agency",
         company_name="Zorvia Healthcare",
         document_type=DocumentType.product_level,
         source_file="doc6.jpg",
@@ -36,17 +38,20 @@ def _seed_one_row(session, document_id="doc6-test"):
         page_count=1,
     )
     products = [ProductRecord(product_name_raw="COSKLOT REG TAB.", hsn_code="30049099", rate=408.86)]
-    transactions = [TransactionRecord(opening_qty=16.0, opening_value=6541.76)]
+    transactions = [TransactionRecord(opening_qty=16.0, opening_value=6541.76, closing_qty=10.0, dump_qty=2.0)]
     rows = [
         CanonicalRow(
             document_type=DocumentType.product_level,
-            distributor_name="Marg Pharma Distributor",
+            distributor_id="medico-drug-agency",
+            distributor_name="Medico Drug Agency",
             company_name="Zorvia Healthcare",
             product_name_raw="COSKLOT REG TAB.",
             hsn_code="30049099",
             rate=408.86,
             opening_quantity=16.0,
             opening_value=6541.76,
+            closing_quantity=10.0,
+            dump_quantity=2.0,
             source_field_breakdown={"sales_return_quantity": {"Market Return": 2.0, "Return Outward": 1.0}},
             source_document="doc6.jpg",
             page_number=1,
@@ -114,3 +119,43 @@ def test_export_with_no_document_id_filter_includes_every_document(session, tmp_
 
     df = pd.read_excel(output_path)
     assert len(df) == 2
+
+
+# --- P14: the uniform final output table -----------------------------------
+
+
+def test_final_output_columns_are_derived_from_the_schema_and_nothing_else():
+    assert FINAL_OUTPUT_COLUMNS == list(FinalStockSaleRow.model_fields.keys())
+    assert FINAL_OUTPUT_COLUMNS == [
+        "id", "stockist_distributor_name", "address", "product_name", "opening_qty", "closing_qty",
+        "dump_qty", "scan_date", "file_name", "scan_by", "update_by", "updated_on",
+    ]
+
+
+def test_final_output_export_writes_the_exact_12_columns_with_real_values(session, tmp_path):
+    _seed_one_row(session)
+    output_path = export_final_output_to_excel(session, tmp_path / "final.xlsx", document_id="doc6-test")
+
+    assert output_path.exists()
+    df = pd.read_excel(output_path)
+    assert list(df.columns) == FINAL_OUTPUT_COLUMNS
+    assert len(df) == 1
+    row = df.iloc[0]
+    assert row["stockist_distributor_name"] == "Medico Drug Agency"
+    assert row["address"] == "Ronaldsay Road, Battala, Agartala, Tripura (W)"
+    assert row["product_name"] == "COSKLOT REG TAB."
+    assert row["opening_qty"] == 16.0
+    assert row["closing_qty"] == 10.0
+    assert row["dump_qty"] == 2.0
+    assert row["file_name"] == "doc6.jpg"
+    assert row["scan_by"] == "system"
+    assert row["update_by"] == "system"
+
+
+def test_final_output_export_for_unknown_document_id_produces_header_only_file(session, tmp_path):
+    _seed_one_row(session)
+    output_path = export_final_output_to_excel(session, tmp_path / "empty.xlsx", document_id="does-not-exist")
+
+    df = pd.read_excel(output_path)
+    assert list(df.columns) == FINAL_OUTPUT_COLUMNS
+    assert len(df) == 0

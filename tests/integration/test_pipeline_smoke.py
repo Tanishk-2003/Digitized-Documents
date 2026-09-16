@@ -22,12 +22,17 @@ test_detect_real_images.py — this file only checks that node traversal
 and routing are correct, not the specific content of every finding.
 
 Every parametrized run gets its own isolated tmp-file SQLite database (via
-DATABASE_URL — see persist/db.py) AND its own tmp Excel output directory
-(overriding only `paths.data_output` on a copy of the real Settings, so
-every other real threshold stays production-accurate) rather than touching
-the real data/interim/pharma_di.db or data/output/ a genuine
-`python scripts/run_pipeline.py` run would use: a test suite must not
-accumulate rows or files in, or depend on prior state of, either.
+DATABASE_URL — see persist/db.py), its own tmp Excel output directory, and
+(P13) its own tmp templates.yaml (overriding only `paths.data_output`/
+`paths.templates` on a copy of the real Settings, so every other real
+threshold stays production-accurate) rather than touching the real
+data/interim/pharma_di.db, data/output/, or config/templates.yaml a
+genuine `python scripts/run_pipeline.py` run would use: a test suite must
+not accumulate rows or files in, or depend on prior state of, any of them.
+This file runs the real pipeline against all 6 real documents, several of
+which resolve columns with real high confidence (P5 build notes) — exactly
+the condition that now triggers a real template-cache write (P13), so this
+isolation matters here more than almost anywhere else in the suite.
 """
 from __future__ import annotations
 
@@ -37,6 +42,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from pharma_di import config as config_module
 from pharma_di.config import load_settings
 from pharma_di.graph import nodes
 from pharma_di.persist.db import database_url
@@ -57,9 +63,25 @@ def _isolated_database(tmp_path, monkeypatch):
 
     real_settings = load_settings()
     fake_settings = real_settings.model_copy(
-        update={"paths": {**real_settings.paths, "data_output": str(tmp_path / "output")}}
+        update={
+            "paths": {
+                **real_settings.paths,
+                "data_output": str(tmp_path / "output"),
+                "templates": str(tmp_path / "templates.yaml"),
+            }
+        }
     )
     monkeypatch.setattr(nodes, "load_settings", lambda: fake_settings)
+    # config.py::load_templates() resolves paths.templates via its OWN
+    # load_settings() call (its own module namespace, not nodes.py's) —
+    # patching nodes.load_settings alone doesn't reach it, so the tier-1
+    # cache READ would still hit the real file even though the WRITE
+    # (which goes through nodes.py's own, correctly-patched settings) is
+    # isolated. Same fake_settings object, so load_column_mappings()/
+    # load_distributors()/load_validation_rules() keep reading the real
+    # files, matching this fixture's own "every other real threshold stays
+    # production-accurate" intent.
+    monkeypatch.setattr(config_module, "load_settings", lambda: fake_settings)
 
     return db_url
 

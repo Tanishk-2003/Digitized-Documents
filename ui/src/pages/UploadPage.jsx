@@ -1,5 +1,8 @@
 import { useState, useCallback } from "react";
 import { uploadDocument } from "../api";
+import Icon from "../components/Icon";
+import StatusBadge from "../components/StatusBadge";
+import { useToast } from "../components/Toast";
 
 /**
  * UploadPage — drag-and-drop or click-to-upload document ingestion.
@@ -8,17 +11,20 @@ import { uploadDocument } from "../api";
 export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
   const [jobs, setJobs] = useState([]);
-  const [error, setError] = useState(null);
+  const showToast = useToast();
 
-  const submit = useCallback(async (file) => {
-    setError(null);
-    try {
-      const job = await uploadDocument(file);
-      setJobs((prev) => [{ ...job, fileName: file.name }, ...prev]);
-    } catch (e) {
-      setError(e.message);
-    }
-  }, []);
+  const submit = useCallback(
+    async (file) => {
+      try {
+        const job = await uploadDocument(file);
+        setJobs((prev) => [{ ...job, fileName: file.name }, ...prev]);
+        showToast(`${file.name} queued for processing`);
+      } catch (e) {
+        showToast(`Upload failed: ${e.message}`, { type: "error" });
+      }
+    },
+    [showToast],
+  );
 
   const onDrop = useCallback(
     (e) => {
@@ -38,8 +44,6 @@ export default function UploadPage() {
     <div>
       <h2 className="page-title">Upload Document</h2>
 
-      {error && <div className="alert alert-error">{error}</div>}
-
       <div className="card mb-4">
         <label
           className={`upload-zone${dragOver ? " drag-over" : ""}`}
@@ -54,10 +58,10 @@ export default function UploadPage() {
             style={{ display: "none" }}
             onChange={onFileChange}
           />
-          <span style={{ fontSize: 36 }}>📄</span>
-          <p style={{ fontWeight: 600, marginTop: 8 }}>
-            Drag &amp; drop document images or click to browse
-          </p>
+          <div className="upload-icon">
+            <Icon name="upload" size={24} />
+          </div>
+          <p className="upload-title">Drag &amp; drop document images, or click to browse</p>
           <p>Supported: JPG, PNG, TIF, PDF</p>
         </label>
       </div>
@@ -80,19 +84,16 @@ export default function UploadPage() {
                   <tr key={j.job_id}>
                     <td className="truncate">{j.fileName}</td>
                     <td className="font-mono text-sm">{j.job_id.slice(0, 12)}…</td>
-                    <td>
-                      <span className={`badge ${j.status === "completed" ? "badge-success" : j.status === "failed" ? "badge-danger" : "badge-info"}`}>
-                        {j.status}
-                      </span>
-                    </td>
+                    <td><StatusBadge status={j.status} /></td>
                     <td className="font-mono text-sm">{j.document_id?.slice(0, 12) ?? "—"}…</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="text-sm text-muted mt-2">
-            ⚠ Processing runs in the background (PaddleOCR can take several minutes). Check Jobs tab for progress.
+          <p className="text-sm text-muted mt-2 flex items-center gap-2">
+            <Icon name="activity" size={13} />
+            Processing runs in the background (PaddleOCR can take several minutes). Check the Jobs tab for progress.
           </p>
         </div>
       )}

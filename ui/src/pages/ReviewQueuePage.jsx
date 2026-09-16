@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { getReviewQueue } from "../api";
+import Icon from "../components/Icon";
+import { SkeletonCard } from "../components/Skeleton";
 
 /** ReviewQueuePage — lists all documents that need human review with reason summary. */
 export default function ReviewQueuePage({ onOpenDoc }) {
@@ -18,14 +20,16 @@ export default function ReviewQueuePage({ onOpenDoc }) {
     <div>
       <h2 className="page-title">Review Queue</h2>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error"><Icon name="alertTriangle" size={16} />{error}</div>}
 
       {loading ? (
-        <div className="flex items-center gap-2"><span className="spinner" /> Loading…</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <SkeletonCard /><SkeletonCard /><SkeletonCard />
+        </div>
       ) : queue.length === 0 ? (
         <div className="empty">
-          <span style={{ fontSize: 32 }}>✅</span>
-          <p style={{ marginTop: 12 }}>Review queue is empty — all documents have been reviewed.</p>
+          <Icon name="checkCircle" size={36} style={{ color: "var(--success)" }} />
+          <p>Review queue is empty — all documents have been reviewed.</p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -42,7 +46,7 @@ export default function ReviewQueuePage({ onOpenDoc }) {
                     )}
                   </div>
                   <div className="text-sm text-muted mt-1">
-                    {item.statement_period && <span>📅 {item.statement_period} · </span>}
+                    {item.statement_period && <span>{item.statement_period} · </span>}
                     {item.document_type && <span>{item.document_type} · </span>}
                     {item.total_rows} rows · {" "}
                     <span style={{ color: "var(--warning)", fontWeight: 600 }}>
@@ -50,9 +54,12 @@ export default function ReviewQueuePage({ onOpenDoc }) {
                     </span>
                   </div>
                   {item.distinct_review_reasons.length > 0 && (
-                    <div className="reasons mt-1">
-                      ⚠ {item.distinct_review_reasons.slice(0, 3).join(" · ")}
-                      {item.distinct_review_reasons.length > 3 && " …"}
+                    <div className="reasons mt-1 flex items-start gap-2">
+                      <Icon name="alertTriangle" size={13} style={{ marginTop: 2, flexShrink: 0 }} />
+                      <span>
+                        {item.distinct_review_reasons.slice(0, 3).join(" · ")}
+                        {item.distinct_review_reasons.length > 3 && " …"}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -60,7 +67,7 @@ export default function ReviewQueuePage({ onOpenDoc }) {
                   className="btn btn-primary"
                   onClick={() => onOpenDoc(item.document_id)}
                 >
-                  Open →
+                  Open <Icon name="arrowRight" size={14} />
                 </button>
               </div>
             </div>

@@ -87,6 +87,26 @@ def test_assemble_document_builds_one_row_per_product():
     assert rows[0].document_type == DocumentType.product_level
 
 
+def test_dump_quantity_resolves_and_flows_through_to_both_records():
+    # P14: resolves open decision D2 — DUMP QTY now has its own real field,
+    # distinct from expired_quantity (not guessed into an existing one).
+    columns = [_band(["Product"]), _band(["Dump", "Qty"])]
+    mapping = ColumnMapping(
+        decisions=[_decision(["Product"], "product_name_raw"), _decision(["Dump", "Qty"], "dump_quantity")]
+    )
+    grid = TableGrid(
+        region=_region(),
+        columns=columns,
+        row_count=1,
+        cells=[_cell(0, ["Product"], "COSKLOT REG TAB."), _cell(0, ["Dump", "Qty"], "12")],
+    )
+    _products, transactions, rows, errors = assemble_document(grid, mapping, _doc_record())
+    assert errors == []
+    assert transactions[0].dump_qty == 12.0
+    assert rows[0].dump_quantity == 12.0
+    assert "dump_quantity" not in rows[0].null_field_reasons
+
+
 def test_assemble_document_skips_section_label_rows():
     columns = [_band(["Product"]), _band(["Opening", "Qty."])]
     mapping = ColumnMapping(

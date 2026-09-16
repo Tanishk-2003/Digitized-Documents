@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from pharma_di.persist.db import get_engine
 from pharma_di.persist.models import Base
-from pharma_di.persist.repository import load_canonical_rows, save_document
+from pharma_di.persist.repository import load_canonical_rows, load_final_output_rows, save_document
 from pharma_di.schemas.canonical import CanonicalRow, DocumentRecord, DocumentType, ProductRecord, ReviewStatus, TransactionRecord
 from pharma_di.schemas.validation import RowValidationResult, RuleId, RuleResult
 
@@ -153,3 +153,84 @@ def test_load_without_document_id_returns_rows_from_every_document(session):
 
 def test_load_for_unknown_document_id_returns_empty(session):
     assert load_canonical_rows(session, document_id="does-not-exist") == []
+
+
+# --- P14: FinalOutput (uniform final table) --------------------------------
+
+
+def test_save_document_writes_a_final_output_row_with_real_address_lookup(session):
+    # medico-drug-agency is doc6.jpg's real distributor (config/distributors.yaml)
+    # — its address is real, hand-recorded config, not fabricated for this test.
+    document_record, products, transactions, rows, validation_results = _product_level_fixture()
+    document_record = document_record.model_copy(
+        update={"distributor_id": "medico-drug-agency", "distributor_name": "Medico Drug Agency"}
+    )
+    rows = [r.model_copy(update={"distributor_id": "medico-drug-agency", "distributor_name": "Medico Drug Agency"}) for r in rows]
+    save_document(session, document_record, products, transactions, rows, validation_results)
+
+    final_rows = load_final_output_rows(session, document_id="doc6-test")
+    assert len(final_rows) == 1
+    row = final_rows[0]
+    assert row["stockist_distributor_name"] == "Medico Drug Agency"
+    assert row["address"] == "Ronaldsay Road, Battala, Agartala, Tripura (W)"
+    assert row["product_name"] == "COSKLOT REG TAB."
+    assert row["opening_qty"] == 16.0
+    assert row["closing_qty"] == 10.0
+    assert row["dump_qty"] is None  # not set on this fixture's TransactionRecord — null, not 0
+    assert row["file_name"] == "doc6.jpg"
+    assert row["scan_by"] == "system"
+    assert row["update_by"] == "system"
+    assert row["scan_date"] is not None
+    assert row["updated_on"] is not None
+
+
+def test_final_output_address_is_null_for_a_distributor_not_in_config(session):
+    # The fixture's own "marg-pharma" id is deliberately not a real
+    # config/distributors.yaml entry — same "route to review rather than
+    # guess" discipline an unresolved product already follows.
+    document_record, products, transactions, rows, validation_results = _product_level_fixture()
+    save_document(session, document_record, products, transactions, rows, validation_results)
+
+    final_rows = load_final_output_rows(session, document_id="doc6-test")
+    assert final_rows[0]["address"] is None
+
+
+def test_save_document_summary_only_still_writes_a_final_output_row(session):
+    document_record = _document_record(
+        "doc3-test",
+        document_type=DocumentType.summary,
+        distributor_id="nabin-drug-centre",
+        distributor_name="Nabin Drug Centre",
+    )
+    row = CanonicalRow(
+        document_type=DocumentType.summary,
+        distributor_id="nabin-drug-centre",
+        distributor_name="Nabin Drug Centre",
+        company_name="Eris Lifescience",
+        opening_value=109599.61,
+        closing_value=47912.00,
+        source_document="doc3.jpg",
+        page_number=1,
+    )
+    validation_result = RowValidationResult(document_id="doc3-test", row_index=0, rule_results=[])
+
+    save_document(session, document_record, [], [], [row], [validation_result])
+
+    final_rows = load_final_output_rows(session, document_id="doc3-test")
+    assert len(final_rows) == 1
+    assert final_rows[0]["product_name"] is None  # no product on a summary document
+    assert final_rows[0]["stockist_distributor_name"] == "Nabin Drug Centre"
+    assert final_rows[0]["address"] == "N S Road, Old Motor Stand, Dharmanagar, Tripura North"
+
+
+def test_resaving_replaces_the_final_output_row_too(session):
+    document_record, products, transactions, rows, validation_results = _product_level_fixture()
+    save_document(session, document_record, products, transactions, rows, validation_results)
+
+    products[0] = products[0].model_copy(update={"product_name_raw": "CORRECTED NAME"})
+    rows[0] = rows[0].model_copy(update={"product_name_raw": "CORRECTED NAME"})
+    save_document(session, document_record, products, transactions, rows, validation_results)
+
+    final_rows = load_final_output_rows(session, document_id="doc6-test")
+    assert len(final_rows) == 1
+    assert final_rows[0]["product_name"] == "CORRECTED NAME"

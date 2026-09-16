@@ -3,7 +3,6 @@ const MAP = {
   needs_review:    ["badge-warning",  "Needs Review"],
   auto_accepted:   ["badge-success",  "Auto-accepted"],
   human_corrected: ["badge-info",     "Corrected"],
-  approved:        ["badge-success",  "Approved"],
   queued:          ["badge-muted",    "Queued"],
   processing:      ["badge-info",     "Processing"],
   completed:       ["badge-success",  "Complete"],

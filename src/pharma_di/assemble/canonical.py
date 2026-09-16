@@ -46,10 +46,18 @@ LEVEL3_TO_TRANSACTION_FIELD = {
     "expired_quantity": "expired_qty",
     "closing_quantity": "closing_qty",
     "closing_value": "closing_value",
+    "dump_quantity": "dump_qty",
     "months_to_expiry": "months_to_expiry",
     "stock_status": "stock_status",
 }
-_LEVEL3_CANONICAL_FIELDS = list(LEVEL3_TO_TRANSACTION_FIELD)
+# Public since P14: validate/rules.py and validate/engine.py both used to
+# hand-maintain their own separate copy of this exact list (flagged by
+# P12's own generalization audit — "adding a new Level-3 canonical field
+# requires editing both lists by hand or R5/R6 silently skip it"). Fixed
+# here rather than perpetuated, since adding dump_quantity is exactly that
+# scenario. Both now derive their own filtered view from this one list
+# instead of re-declaring it.
+LEVEL3_CANONICAL_FIELDS = list(LEVEL3_TO_TRANSACTION_FIELD)
 _PRODUCT_CANONICAL_FIELDS = ["product_name_raw", "hsn_code", "pack", "rate"]
 _STRING_CANONICAL_FIELDS = {"stock_status", "product_name_raw", "hsn_code", "pack"}
 
@@ -129,7 +137,7 @@ def _canonical_row_kwargs(
     breakdown: dict[str, dict[str, Any]],
     confidence: dict[str, float],
 ) -> dict[str, Any]:
-    kwargs: dict[str, Any] = {f: values.get(f) for f in _LEVEL3_CANONICAL_FIELDS}
+    kwargs: dict[str, Any] = {f: values.get(f) for f in LEVEL3_CANONICAL_FIELDS}
     kwargs.update(
         distributor_id=document_record.distributor_id,
         distributor_name=document_record.distributor_name,
@@ -213,7 +221,7 @@ def _assemble_product_level(
         transaction = _build_transaction_record(values)
 
         null_reasons = _null_reasons(
-            values, _LEVEL3_CANONICAL_FIELDS, "no source column on this document resolved to this field, or this row's cell was blank"
+            values, LEVEL3_CANONICAL_FIELDS, "no source column on this document resolved to this field, or this row's cell was blank"
         )
         null_reasons.update(
             _null_reasons(values, ["hsn_code", "pack", "rate"], "no source column on this document resolved to this field")
@@ -280,7 +288,7 @@ def _assemble_summary(
 
     null_reasons = _null_reasons(
         merged_values,
-        _LEVEL3_CANONICAL_FIELDS,
+        LEVEL3_CANONICAL_FIELDS,
         "no source column on this document resolved to this field, or every row's cell was blank",
     )
 

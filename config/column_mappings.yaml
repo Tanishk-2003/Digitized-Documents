@@ -106,6 +106,26 @@ closing_value:
   aliases:
   - closing value
   - closing value[pts]
+dump_quantity:
+  # P14: resolves open decision D2 ("DUMP QTY semantics... Expired stock?
+  # Breakage? Near-expiry return?... Left unresolved until answered" —
+  # IMPLEMENTATION_PLAN.md's own D2). Resolved by NOT choosing any of
+  # those candidate interpretations: kept as its own verbatim field,
+  # distinct from expired_quantity, rather than guessed into one meaning.
+  # Checked directly against real doc5.jpg/doc6.jpg data, not assumed:
+  # both DO resolve via tier 4 fuzzy matching (their OCR-garbled "DUP"/
+  # "DOM2" renderings of "DUMP" are close enough in character overlap) —
+  # doc5.jpg's "DUP QTY." scores 94.1 (confident, auto-resolves like any
+  # clean column); doc6.jpg's "DOM2 QTY" scores exactly 75.0, the
+  # low-confidence floor, so it resolves but correctly forces its row to
+  # review rather than trusting a borderline match silently.
+  paths:
+  - - dump
+    - qty
+  - - dump
+    - qty.
+  aliases:
+  - dump qty
 months_to_expiry:
   paths:
   - - dump
@@ -121,3 +141,35 @@ derived_check_only:
   - total rcvd.
   - total rcvd
   - total sold
+  # Which of these mean "total received" vs "total sold" (R3, validate/
+  # derived.py) — a SEPARATE split from `aliases` above (which only decides
+  # whether a header maps to this field AT ALL), because `aliases` must stay
+  # a flat list for mapping/dictionary.py::FieldEntry/mapping/resolver.py's
+  # normal tier 2-4 matching. A header not listed under either group here
+  # still resolves to derived_check_only via `aliases` above, but R3 simply
+  # has nothing to classify it as (validate/derived.py's own null-vs-zero
+  # discipline: never guess which total a header the config doesn't
+  # recognize actually means).
+  received_sold_groups:
+    received:
+    - total rcvd.
+    - total rcvd
+    - total received
+    sold:
+    - total sold
+
+# Tier 3's whole-word abbreviation table (IMPLEMENTATION_PLAN.md section 4.6)
+# — moved here from a hardcoded Python dict in mapping/normalize.py (P12) so
+# a new distributor's own abbreviation style is a config change, not a code
+# change, matching every other tier's own vocabulary already living here.
+# NOT a canonical-field entry: mapping/dictionary.py::load_field_entries
+# explicitly excludes this key when building FieldEntry objects.
+abbreviations:
+  qty: quantity
+  rcvd: received
+  rtn: return
+  prch: purchase
+  clos: closing
+  retn: return
+  recpt: receipt
+  op: opening

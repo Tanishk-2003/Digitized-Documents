@@ -28,7 +28,12 @@ require review; <75 never auto-accepts a value column."
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rapidfuzz import fuzz
+
+if TYPE_CHECKING:
+    from pharma_di.mapping.dictionary import FieldEntry
 
 ACCEPT_THRESHOLD = 90.0
 LOW_CONFIDENCE_THRESHOLD = 75.0
@@ -57,3 +62,29 @@ def best_fuzzy_match(text: str, candidates: list[str]) -> tuple[str, float] | No
         if best is None or score > best[1]:
             best = (candidate, score)
     return best
+
+
+def best_matching_field(header_text: str, field_entries: list["FieldEntry"]) -> tuple["FieldEntry", float] | None:
+    """The FieldEntry whose paths/aliases best fuzzy-match `header_text`
+    (+ its score), or None if `field_entries` is empty or none of them
+    have any candidates at all. Extracted (P13) from what was originally
+    mapping/resolver.py::DictionaryResolver._resolve_fuzzy's own private
+    loop, so it can be shared with detect/fingerprint.py: both need
+    "what field does this text most resemble" — resolver.py to actually
+    resolve a column, fingerprint.py to compute an OCR-noise-tolerant
+    fingerprint (two different spellings of the same real header that both
+    confidently match the same field should hash the same way, using the
+    EXACT matching logic real resolution uses, not a separate, weaker
+    approximation that could disagree with it)."""
+    best_field: "FieldEntry | None" = None
+    best_score = 0.0
+    for entry in field_entries:
+        candidates = [" ".join(p) for p in entry.paths] + list(entry.aliases)
+        if not candidates:
+            continue
+        match = best_fuzzy_match(header_text, candidates)
+        if match is not None and match[1] > best_score:
+            best_field, best_score = entry, match[1]
+    if best_field is None:
+        return None
+    return best_field, best_score

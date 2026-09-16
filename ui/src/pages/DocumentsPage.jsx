@@ -1,12 +1,17 @@
 import { useState, useEffect } from "react";
 import { listDocuments, exportDocumentExcel } from "../api";
 import StatusBadge from "../components/StatusBadge";
+import Icon from "../components/Icon";
+import { SkeletonTable } from "../components/Skeleton";
+import { useToast } from "../components/Toast";
 
 /** DocumentsPage — list of all processed documents with export and review links. */
 export default function DocumentsPage({ onReview }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [exportingId, setExportingId] = useState(null);
+  const showToast = useToast();
 
   useEffect(() => {
     listDocuments()
@@ -16,6 +21,7 @@ export default function DocumentsPage({ onReview }) {
   }, []);
 
   const downloadExcel = async (docId) => {
+    setExportingId(docId);
     try {
       const blob = await exportDocumentExcel(docId);
       const url = URL.createObjectURL(blob);
@@ -24,8 +30,11 @@ export default function DocumentsPage({ onReview }) {
       a.download = `${docId}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast(`Exported ${docId}.xlsx`);
     } catch (e) {
-      alert(`Export failed: ${e.message}`);
+      showToast(`Export failed: ${e.message}`, { type: "error" });
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -33,12 +42,15 @@ export default function DocumentsPage({ onReview }) {
     <div>
       <h2 className="page-title">Documents</h2>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error"><Icon name="alertTriangle" size={16} />{error}</div>}
 
       {loading ? (
-        <div className="flex items-center gap-2"><span className="spinner" /> Loading…</div>
+        <SkeletonTable rows={5} cols={7} />
       ) : docs.length === 0 ? (
-        <div className="empty">No documents in the database yet. Upload and process a document first.</div>
+        <div className="empty">
+          <Icon name="documents" size={36} />
+          <p>No documents in the database yet. Upload and process a document first.</p>
+        </div>
       ) : (
         <div className="card">
           <div className="table-scroll">
@@ -88,8 +100,14 @@ export default function DocumentsPage({ onReview }) {
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => downloadExcel(d.document_id)}
+                          disabled={exportingId === d.document_id}
                         >
-                          ↓ Excel
+                          {exportingId === d.document_id ? (
+                            <span className="spinner" />
+                          ) : (
+                            <Icon name="download" size={13} />
+                          )}
+                          Excel
                         </button>
                       </div>
                     </td>

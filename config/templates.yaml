@@ -1,12 +1,45 @@
-# Template fingerprint cache (IMPLEMENTATION_PLAN.md section 1.3).
-#
-# Key = hash of the normalized leaf-header signature of a stock table.
-# Value = the resolved column mapping for that exact header layout, so a new
-# document from an already-seen template resolves with zero fuzzy matching.
-#
-# Populated at runtime by the P4/P5 detection+mapping stages after a table's
-# columns are first resolved (deterministically or via human review). Empty
-# at P0 — this file exists so the config loader has a real (if empty) target
-# and downstream stages don't need a special case for "cache not built yet".
-
-fingerprints: {}
+fingerprints:
+  01d043cbdcc6c647:
+    field:product_name_raw: product_name_raw
+    field:pack: pack
+    field:rate: rate
+    field:opening_quantity: opening_quantity
+    field:opening_value: opening_value
+    field:received_quantity: received_quantity
+    field:received_value: received_value
+    field:closing_value: closing_value
+  30855fd102392311:
+    field:product_name_raw: product_name_raw
+    field:pack: pack
+    field:received_quantity: received_quantity
+    field:sales_return_quantity: sales_return_quantity
+    field:sales_quantity: sales_quantity
+  76bbd5714324bea5:
+    field:product_name_raw: product_name_raw
+    field:opening_quantity: opening_quantity
+    field:free_received_quantity: free_received_quantity
+    field:derived_check_only: derived_check_only
+    field:sales_quantity: sales_quantity
+    field:free_sales_quantity: free_sales_quantity
+    field:sales_return_quantity: sales_return_quantity
+    field:purchase_return_quantity: purchase_return_quantity
+    field:expired_quantity: expired_quantity
+    field:closing_quantity: closing_quantity
+  36653677ccb06a96:
+    field:received_quantity: received_quantity
+    field:purchase_return_quantity: purchase_return_quantity
+    field:closing_value: closing_value
+  e1fc7ef230cf4797:
+    field:product_name_raw: product_name_raw
+    field:opening_quantity: opening_quantity
+    field:opening_value: opening_value
+    field:received_quantity: received_quantity
+    field:received_value: received_value
+    field:sales_quantity: sales_quantity
+    field:sales_value: sales_value
+    field:closing_quantity: closing_quantity
+    field:dump_quantity: dump_quantity
+  77dcec1647881250:
+    field:product_name_raw: product_name_raw
+    field:opening_quantity: opening_quantity
+    field:opening_value: opening_value

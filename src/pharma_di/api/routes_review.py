@@ -16,6 +16,7 @@ from pharma_di.schemas.api import (
     CorrectionResponse,
     ReviewQueueItem,
 )
+from pharma_di.schemas.canonical import ReviewStatus
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -88,8 +89,13 @@ async def approve_document(
 
     updated_count = 0
     for rev in reviews:
-        if rev.review_status != "approved":
-            rev.review_status = "approved"
+        if rev.review_status == ReviewStatus.needs_review:
+            # No distinct "approved without change" state exists in the
+            # canonical schema's own closed review_status enum (CLAUDE.md:
+            # auto_accepted | needs_review | human_corrected) — human_corrected
+            # is the closest fit, since it's the only member representing a
+            # human having acted on the row, whether or not a value changed.
+            rev.review_status = ReviewStatus.human_corrected.value
             updated_count += 1
 
     session.commit()
@@ -147,9 +153,16 @@ async def correct_document(
             session.add(corr_rec)
             updated_rows += 1
 
+    corrected_transaction_ids = {int(rc["transaction_id"]) for rc in request.row_corrections if rc.get("transaction_id")}
+    now = dt.datetime.utcnow()
     for txn in transactions:
         if txn.review and txn.review.review_status == "needs_review":
             txn.review.review_status = "human_corrected"
+        # P14: a row a human touched should say so in the uniform final
+        # table too, not just in the Correction audit log / review_status.
+        if txn.id in corrected_transaction_ids and txn.final_output is not None:
+            txn.final_output.update_by = "human_reviewer"
+            txn.final_output.updated_on = now
 
     session.commit()
 

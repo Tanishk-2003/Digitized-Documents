@@ -10,11 +10,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from pharma_di.config import REPO_ROOT
-from pharma_di.export.excel import export_to_excel
+from pharma_di.export.excel import export_final_output_to_excel, export_to_excel
 from pharma_di.persist.db import get_session
 from pharma_di.persist.models import Document, ReviewRecord, Transaction
-from pharma_di.persist.repository import load_canonical_rows
+from pharma_di.persist.repository import load_canonical_rows, load_final_output_rows
 from pharma_di.schemas.api import DocumentDetailResponse, DocumentSummaryResponse, JobResponse
+from pharma_di.schemas.final_output import FinalStockSaleRow
 from pharma_di.workers.jobs import default_job_manager
 
 router = APIRouter(prefix="/api", tags=["documents"])
@@ -155,6 +156,22 @@ async def get_document_detail(
 
 
 @router.get(
+    "/final-output",
+    response_model=list[FinalStockSaleRow],
+    summary="List the uniform 12-column final output table, optionally filtered to one document",
+)
+async def list_final_output(
+    document_id: str | None = Query(default=None, description="Restrict to one document_id"),
+    session: Session = Depends(get_db),
+) -> list[FinalStockSaleRow]:
+    """P16: the JSON counterpart to /export/final below — that route returns
+    an .xlsx file; this one returns the same rows as data, for the UI's
+    sortable/filterable final-output table view."""
+    rows = load_final_output_rows(session, document_id=document_id)
+    return [FinalStockSaleRow(**row) for row in rows]
+
+
+@router.get(
     "/documents/{document_id}/export/excel",
     summary="Download Excel spreadsheet matching the canonical Stock & Sale schema",
 )
@@ -178,5 +195,59 @@ async def export_document_excel(
     return FileResponse(
         path=out_file,
         filename=f"{document_id}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@router.get(
+    "/documents/{document_id}/export/final",
+    summary="Download the uniform 12-column final output table for one document",
+)
+async def export_document_final_output(
+    document_id: str,
+    session: Session = Depends(get_db),
+) -> FileResponse:
+    """P14: the always-uniform reporting export — same 12 columns
+    regardless of the source document's original layout (schemas/
+    final_output.py::FinalStockSaleRow). Separate route from /export/excel
+    above: that one exports the full, detailed canonical schema this
+    project's validation/review pipeline depends on; this one exports the
+    deliberately narrower view built from it."""
+    doc = session.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' not found in database",
+        )
+
+    out_dir = REPO_ROOT / "data" / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / f"{document_id}-final.xlsx"
+
+    export_final_output_to_excel(session, out_file, document_id=document_id)
+
+    return FileResponse(
+        path=out_file,
+        filename=f"{document_id}-final.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@router.get(
+    "/export/final",
+    summary="Download the uniform 12-column final output table for every persisted document",
+)
+async def export_all_final_output(session: Session = Depends(get_db)) -> FileResponse:
+    """The bulk counterpart to /documents/{id}/export/final — every
+    document currently in the database, not just one pipeline run's."""
+    out_dir = REPO_ROOT / "data" / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / "final_output_all.xlsx"
+
+    export_final_output_to_excel(session, out_file, document_id=None)
+
+    return FileResponse(
+        path=out_file,
+        filename="final_output_all.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )

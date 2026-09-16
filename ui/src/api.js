@@ -74,3 +74,15 @@ export async function correctDocument(documentId, { columnMappings, rowCorrectio
   });
   return json(res);
 }
+
+// ---------- Final output (uniform 12-column table, P14/P16) ----------
+
+export async function listFinalOutput() {
+  return json(await fetch(`${BASE}/api/final-output`));
+}
+
+export async function exportAllFinalOutput() {
+  const res = await fetch(`${BASE}/api/export/final`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}

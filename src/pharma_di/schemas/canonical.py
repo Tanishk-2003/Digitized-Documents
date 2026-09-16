@@ -79,6 +79,7 @@ class TransactionRecord(BaseModel):
     expired_qty: float | None = None
     closing_qty: float | None = None
     closing_value: float | None = None
+    dump_qty: float | None = None
     stock_status: str | None = None
     months_to_expiry: float | None = None
 
@@ -119,6 +120,7 @@ class CanonicalRow(BaseModel):
     expired_quantity: float | None = None
     closing_quantity: float | None = None
     closing_value: float | None = None
+    dump_quantity: float | None = None
     months_to_expiry: float | None = None
     stock_status: str | None = None
 

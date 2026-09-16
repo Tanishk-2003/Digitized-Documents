@@ -2,17 +2,17 @@
 section 4.7."""
 from __future__ import annotations
 
+from pharma_di.assemble.canonical import LEVEL3_CANONICAL_FIELDS
 from pharma_di.schemas.validation import RuleId, RuleResult
 
-# Every Level-3 numeric canonical field a sign check could apply to
-# (assemble/canonical.py's own _LEVEL3_CANONICAL_FIELDS, minus stock_status
-# which is a string, not a signed quantity).
-_SIGNED_FIELDS = [
-    "opening_quantity", "opening_value", "received_quantity", "received_value",
-    "free_received_quantity", "sales_quantity", "sales_value", "free_sales_quantity",
-    "sales_return_quantity", "purchase_return_quantity", "expired_quantity",
-    "closing_quantity", "closing_value", "months_to_expiry",
-]
+# Every Level-3 numeric canonical field a sign check could apply to —
+# derived from assemble/canonical.py's own LEVEL3_CANONICAL_FIELDS (made
+# public in P14 for exactly this: this list and validate/engine.py's
+# _LEVEL3_FIELD_NAMES used to be two independently hand-maintained copies,
+# flagged by P12's generalization audit as a real gap — a field added to
+# one and not the other would silently skip R5/R6 for it), minus
+# stock_status, which is a string, not a signed quantity.
+_SIGNED_FIELDS = [f for f in LEVEL3_CANONICAL_FIELDS if f != "stock_status"]
 
 
 def check_sign_plausibility(values: dict[str, float | None], negative_allowed_fields: frozenset[str] = frozenset()) -> RuleResult:

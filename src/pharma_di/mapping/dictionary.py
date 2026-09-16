@@ -11,11 +11,19 @@ R3 ... instead" of being written to a CanonicalRow field, but that's a
 downstream (P7) consumption detail — at the mapping stage a "TOTAL RCVD."
 column is just as real and resolvable as any other, and leaving it
 excluded here would wrongly send it to unmapped_columns/needs_review.
+
+`abbreviations` (P12) is the one top-level key that IS filtered out — it's
+tier 3's whole-word expansion table (config.py::load_abbreviations()), not
+a canonical field a header could ever resolve to, and living in this same
+file only because it's part of the same "how a header maps" vocabulary a
+new distributor format extends.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+_NON_FIELD_KEYS = {"abbreviations"}
 
 
 @dataclass(frozen=True)
@@ -35,4 +43,5 @@ def load_field_entries(column_mappings_cfg: dict[str, Any]) -> list[FieldEntry]:
             combine=spec.get("combine"),
         )
         for field_name, spec in column_mappings_cfg.items()
+        if field_name not in _NON_FIELD_KEYS
     ]

@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import create_engine
 
+from pharma_di import config as config_module
 from pharma_di.config import load_settings
 from pharma_di.graph import nodes
 from pharma_di.graph.build import compiled_graph
@@ -68,19 +69,40 @@ def _isolated_persistence(monkeypatch, tmp_path):
     database and output directory, never the real data/interim/pharma_di.db
     or data/output/ a genuine pipeline run would use.
 
-    Overrides only `paths.data_output` on a copy of the real Settings
-    object (not a fully fake one) so every other node's real thresholds
-    stay exactly what production uses — this file's job is graph wiring,
-    not re-verifying settings values other test files already cover.
+    Overrides only `paths.data_output`/`paths.templates` on a copy of the
+    real Settings object (not a fully fake one) so every other node's real
+    thresholds stay exactly what production uses — this file's job is
+    graph wiring, not re-verifying settings values other test files
+    already cover. `templates` redirected since P13: map_columns now
+    writes a resolved column mapping into templates.yaml (the exact class
+    of real bug P11 found and fixed for column_mappings.yaml — confirmed
+    that mistake once already in this project, not repeating it here).
     """
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test_graph.db'}")
     Base.metadata.create_all(create_engine(database_url()))
 
     real_settings = load_settings()
     fake_settings = real_settings.model_copy(
-        update={"paths": {**real_settings.paths, "data_output": str(tmp_path / "output")}}
+        update={
+            "paths": {
+                **real_settings.paths,
+                "data_output": str(tmp_path / "output"),
+                "templates": str(tmp_path / "templates.yaml"),
+            }
+        }
     )
     monkeypatch.setattr(nodes, "load_settings", lambda: fake_settings)
+    # config.py::load_templates() calls load_settings() via ITS OWN module
+    # namespace, not nodes.py's — patching nodes.load_settings alone (above)
+    # doesn't reach that internal call, so map_columns's tier-1 cache READ
+    # would still hit the real config/templates.yaml even though its WRITE
+    # (which nodes.py does call load_settings()-then-resolve_path() for,
+    # directly) is correctly isolated. Same fake_settings object either way
+    # — only paths.data_output/paths.templates differ from real, so this
+    # doesn't change load_column_mappings()/load_distributors()/
+    # load_validation_rules()'s own real-file behavior, which this file's
+    # own docstring above says should stay production-accurate.
+    monkeypatch.setattr(config_module, "load_settings", lambda: fake_settings)
 
 
 EXPECTED_HAPPY_PATH_ORDER = [

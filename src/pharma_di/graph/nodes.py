@@ -18,7 +18,14 @@ from pathlib import Path
 from PIL import Image
 
 from pharma_di.assemble import canonical as canonical_module
-from pharma_di.config import load_column_mappings, load_distributors, load_settings, load_templates, load_validation_rules
+from pharma_di.config import (
+    load_abbreviations,
+    load_column_mappings,
+    load_distributors,
+    load_settings,
+    load_templates,
+    load_validation_rules,
+)
 from pharma_di.detect import document as detect_document_module
 from pharma_di.detect import fingerprint as fingerprint_module
 from pharma_di.export.excel import export_to_excel
@@ -26,6 +33,7 @@ from pharma_di.graph.state import PipelineState
 from pharma_di.layout import regions as layout_regions
 from pharma_di.layout import tables as layout_tables
 from pharma_di.mapping import dictionary as mapping_dictionary
+from pharma_di.mapping import template_cache as template_cache_module
 from pharma_di.mapping.resolver import DictionaryResolver, ReviewQueueResolver, resolve_header
 from pharma_di.ocr.cache import OcrCache
 from pharma_di.ocr.paddle_engine import run_ocr
@@ -36,7 +44,7 @@ from pharma_di.resolve.masters import load_products_master
 from pharma_di.resolve.products import resolve_product
 from pharma_di.schemas.canonical import DocumentRecord, ReviewStatus
 from pharma_di.schemas.layout import LayoutResult
-from pharma_di.schemas.mapping import ColumnMapping, TableContext
+from pharma_di.schemas.mapping import ColumnMapping, MappingStatus, TableContext
 from pharma_di.validate.engine import validate_document
 
 # ---------------------------------------------------------------------------
@@ -241,11 +249,21 @@ def detect_document(state: PipelineState) -> dict:
         company_name = detect_document_module.detect_company(header_text, distributors_cfg, section_label_texts)
         statement_from, statement_to = detect_document_module.detect_period(header_text)
 
-        product_name_aliases = load_column_mappings().get("product_name_raw", {}).get("aliases", [])
+        column_mappings_cfg = load_column_mappings()
+        product_name_aliases = column_mappings_cfg.get("product_name_raw", {}).get("aliases", [])
         columns = state.layout_result.tables[0].columns if state.layout_result.tables else []
         document_type = detect_document_module.detect_document_type(columns, product_name_aliases)
 
-        template_fingerprint = fingerprint_module.compute_fingerprint(columns) if columns else None
+        # P13: fingerprinted with the same field dictionary + abbreviation
+        # table real column resolution uses (not bare lowercase+strip), so
+        # two OCR-garbled spellings of one real header that both
+        # confidently fuzzy-match the same canonical field converge to the
+        # same fingerprint — see detect/fingerprint.py::leaf_fingerprint_key.
+        field_entries = mapping_dictionary.load_field_entries(column_mappings_cfg)
+        abbreviations = load_abbreviations()
+        template_fingerprint = (
+            fingerprint_module.compute_fingerprint(columns, field_entries, abbreviations) if columns else None
+        )
     except Exception as exc:  # noqa: BLE001 — a detection failure routes to review, never crashes the graph
         return {"trace": ["detect_document"], "errors": [f"detect_document: {exc}"]}
 
@@ -292,15 +310,92 @@ def map_columns(state: PipelineState) -> dict:
 
     try:
         field_entries = mapping_dictionary.load_field_entries(load_column_mappings())
-        resolvers = [DictionaryResolver(field_entries, load_templates()), ReviewQueueResolver()]
+        settings = load_settings()
+        abbreviations = load_abbreviations()
+        accept_threshold = settings.semantic_mapping.fuzzy_accept_threshold
+        resolvers = [
+            DictionaryResolver(
+                field_entries,
+                load_templates(),
+                accept_threshold=accept_threshold,
+                low_confidence_threshold=settings.semantic_mapping.fuzzy_review_threshold,
+                abbreviations=abbreviations,
+            ),
+            ReviewQueueResolver(),
+        ]
         ctx = TableContext(distributor_id=state.distributor_id, fingerprint=state.template_fingerprint)
 
         grid = state.layout_result.tables[0]
         decisions = [resolve_header(column.header, ctx, resolvers) for column in grid.columns]
+
+        _cache_resolved_template(
+            ctx.fingerprint, grid.columns, decisions, field_entries, abbreviations, accept_threshold,
+            settings.resolve_path("templates"),
+        )
     except Exception as exc:  # noqa: BLE001 — a mapping failure routes to review, never crashes the graph
         return {"trace": ["map_columns"], "errors": [f"map_columns: {exc}"]}
 
     return {"trace": ["map_columns"], "column_mapping": ColumnMapping(decisions=decisions)}
+
+
+_CACHEABLE_STATUSES = {MappingStatus.exact, MappingStatus.normalized, MappingStatus.fuzzy, MappingStatus.template_cache}
+
+
+def _cache_resolved_template(
+    fingerprint: str | None,
+    columns,
+    decisions,
+    field_entries,
+    abbreviations: dict[str, str],
+    accept_threshold: float,
+    templates_file,
+) -> None:
+    """P13: write this table's confidently-resolved columns into
+    templates.yaml, keyed by its fingerprint, so a future document sharing
+    this exact layout hits tier 1 for THOSE columns instead of re-running
+    tiers 2-4 — closing the gap detect/fingerprint.py::lookup_fingerprint's
+    own docstring already described but nothing ever implemented
+    (confirmed: config/templates.yaml stayed `fingerprints: {}` through
+    P5-P12).
+
+    Caches PER COLUMN, not all-or-nothing for the whole table — tried an
+    all-or-nothing gate first and verified directly against a real pipeline
+    run that it never actually caches anything: every one of the 6 real
+    sample documents has at least one genuinely unresolved or
+    low-confidence column by design (CLAUDE.md's own open decisions D1/D2,
+    OCR too garbled to trust — e.g. doc6.jpg's DOM2/CEY), so requiring
+    every column to be confident before caching ANY of them means the
+    cache would stay empty in practice. A column left out of a
+    fingerprint's cached mapping simply falls through to a fresh tiers-2-4
+    resolution next time (same as an uncached table today, not a
+    regression) — its own raw text can legitimately differ from what
+    produced this document's cache entry (P13's whole point), so
+    re-checking it fresh is correct, not wasted work.
+
+    Still never caches an unresolved or merely-fuzzy_low_confidence
+    decision — caching a shaky guess would let one bad early read poison
+    every later document sharing this fingerprint for that column (same
+    reasoning lookup_fingerprint's own docstring states). A caching
+    failure (e.g. a disk write issue) must not turn an otherwise-
+    successful column resolution into a map_columns error — this is a
+    performance/consistency optimization on top of already-correct
+    resolution, not correctness-critical itself, so it's swallowed here
+    rather than left to propagate out of the try block above.
+    """
+    if not fingerprint or not decisions:
+        return
+    try:
+        leaf_mapping = {
+            fingerprint_module.leaf_fingerprint_key(col.header, field_entries, abbreviations, accept_threshold): (
+                d.canonical_field
+            )
+            for col, d in zip(columns, decisions)
+            if d.status in _CACHEABLE_STATUSES
+        }
+        if leaf_mapping:
+            template_cache_module.save_fingerprint(fingerprint, leaf_mapping, templates_file)
+    except Exception:  # noqa: BLE001 — see docstring: never let a cache-write failure fail real resolution
+        pass
 
 
 def assemble_canonical(state: PipelineState) -> dict:
@@ -415,6 +510,7 @@ def validate(state: PipelineState) -> dict:
         rate_tolerance_pct = validation_rules_cfg.get("rate_coherence", {}).get(
             "tolerance_pct", settings.validation.rate_tolerance_pct
         )
+        derived_groups = load_column_mappings().get("derived_check_only", {}).get("received_sold_groups", {})
 
         results, updated_rows = validate_document(
             document_id=state.document_id,
@@ -427,6 +523,8 @@ def validate(state: PipelineState) -> dict:
             distributor_id=state.distributor_id,
             distributors_cfg=load_distributors(),
             validation_rules_cfg=validation_rules_cfg,
+            derived_received_aliases=derived_groups.get("received"),
+            derived_sold_aliases=derived_groups.get("sold"),
             rate_tolerance_pct=rate_tolerance_pct,
             totals_tolerance_abs=settings.validation.totals_tolerance_abs,
             min_field_confidence=settings.validation.min_field_confidence,

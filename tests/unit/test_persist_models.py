@@ -12,7 +12,7 @@ from __future__ import annotations
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session
 
-from pharma_di.persist.models import Base, Correction, Document, Product, ReviewRecord, Transaction
+from pharma_di.persist.models import Base, Correction, Document, FinalOutput, Product, ReviewRecord, Transaction
 
 
 def _engine():
@@ -21,10 +21,11 @@ def _engine():
     return engine
 
 
-def test_all_five_tables_are_created():
+def test_all_six_tables_are_created():
+    # P14 added final_output (the uniform reporting table) as the 6th.
     engine = _engine()
     tables = set(inspect(engine).get_table_names())
-    assert tables == {"documents", "products", "transactions", "review_records", "corrections"}
+    assert tables == {"documents", "products", "transactions", "review_records", "corrections", "final_output"}
 
 
 def test_product_level_relationship_chain_round_trips():

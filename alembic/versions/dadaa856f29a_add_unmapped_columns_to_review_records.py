@@ -20,14 +20,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema.
-    unmapped_columns is nullable=True with server_default='{}' so that
-    SQLite's ALTER TABLE can add the column to existing rows without violating
-    any NOT NULL constraint — SQLite cannot add a NOT NULL column without a
-    server default to backfill.
+    unmapped_columns is nullable=True, matching persist/models.py's own
+    ReviewRecord.unmapped_columns declaration (ORM-level default=dict only,
+    no server_default) — existing rows simply get NULL, which is valid
+    since there's no NOT NULL constraint to backfill for.
+
+    P15 (real MySQL verification): originally this column carried
+    server_default='{}'. MySQL 8 rejects a bare literal DEFAULT on a JSON
+    column (errno 1101: "BLOB, TEXT, GEOMETRY or JSON column ... can't have
+    a default value" — MySQL 8.0.13+ requires such defaults to be a
+    parenthesized expression, e.g. DEFAULT ('{}')) even though SQLite
+    accepts the literal form without complaint. Removed rather than
+    rewritten as a MySQL-specific expression default, since nothing in the
+    model actually relies on a database-level default here.
     """
     op.add_column(
         'review_records',
-        sa.Column('unmapped_columns', sa.JSON(), nullable=True, server_default='{}'),
+        sa.Column('unmapped_columns', sa.JSON(), nullable=True),
     )
 
 

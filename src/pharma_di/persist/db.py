@@ -7,15 +7,19 @@ The connection string comes from the `DATABASE_URL` environment variable
 whoever runs this pipeline, not typed or stored by this codebase or by an
 assistant acting on it — database credentials are exactly the kind of
 secret that belongs in the operator's own environment, never hardcoded or
-handled on someone's behalf. When `DATABASE_URL` isn't set, this defaults
-to a local SQLite file (`data/interim/pharma_di.db`): this dev/test
-environment has a real local MySQL 8.0 server installed and running, but
-no credentials were available to this session to connect to it (root
-access requires a password not provided) — SQLite lets the pipeline, its
-tests, and its Alembic migrations all run against a real, schema-identical
-relational database with zero setup, while keeping every model written
-against SQLAlchemy's generic column types so pointing `DATABASE_URL` at a
-real MySQL instance is the only change needed to switch, with no code or
+handled on someone's behalf. `DATABASE_URL` may be set as a real OS
+environment variable, or via a git-ignored `.env` file at the repo root
+(see `.env.example`) loaded here with python-dotenv; a real OS env var
+always wins if both are present (`load_dotenv`'s default `override=False`).
+When `DATABASE_URL` isn't set either way, this defaults to a local SQLite
+file (`data/interim/pharma_di.db`): this dev/test environment has a real
+local MySQL 8.0 server installed and running, but no credentials were
+available to this session to connect to it (root access requires a
+password not provided) — SQLite lets the pipeline, its tests, and its
+Alembic migrations all run against a real, schema-identical relational
+database with zero setup, while keeping every model written against
+SQLAlchemy's generic column types so pointing `DATABASE_URL` at a real
+MySQL instance is the only change needed to switch, with no code or
 migration changes.
 """
 from __future__ import annotations
@@ -23,11 +27,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_SQLITE_PATH = REPO_ROOT / "data" / "interim" / "pharma_di.db"
+
+load_dotenv(REPO_ROOT / ".env")
 
 
 def database_url() -> str:

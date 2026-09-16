@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pharma_di.detect.fingerprint import lookup_fingerprint
+from pharma_di.detect.fingerprint import leaf_fingerprint_key, lookup_fingerprint
 from pharma_di.mapping.dictionary import FieldEntry
-from pharma_di.mapping.fuzzy import ACCEPT_THRESHOLD, LOW_CONFIDENCE_THRESHOLD, best_fuzzy_match
+from pharma_di.mapping.fuzzy import ACCEPT_THRESHOLD, LOW_CONFIDENCE_THRESHOLD, best_matching_field
 from pharma_di.mapping.normalize import basic_normalize_path, expand_abbreviations, expand_abbreviations_path
 from pharma_di.schemas.layout import HeaderNode
 from pharma_di.schemas.mapping import MappingDecision, MappingStatus, SemanticResolver, TableContext
@@ -29,9 +29,36 @@ class DictionaryResolver:
     then fuzzy match — in that order, stopping at the first that resolves.
     """
 
-    def __init__(self, field_entries: list[FieldEntry], templates_cfg: dict[str, Any]):
+    def __init__(
+        self,
+        field_entries: list[FieldEntry],
+        templates_cfg: dict[str, Any],
+        accept_threshold: float = ACCEPT_THRESHOLD,
+        low_confidence_threshold: float = LOW_CONFIDENCE_THRESHOLD,
+        abbreviations: dict[str, str] | None = None,
+    ):
+        """`accept_threshold`/`low_confidence_threshold` default to
+        `mapping/fuzzy.py`'s own constants (IMPLEMENTATION_PLAN.md section
+        4.6's exact numbers) — P11's generalization audit found
+        `config/settings.yaml`'s `semantic_mapping.fuzzy_accept_threshold`/
+        `fuzzy_review_threshold` were declared but never actually read
+        anywhere, with these fuzzy.py constants silently duplicating the
+        same numbers instead. `graph/nodes.py::map_columns` now passes the
+        real `Settings.semantic_mapping` values in here, making that config
+        live; a caller that doesn't pass them (e.g. a unit test instantiating
+        this directly) still gets the same defaults as before, unchanged.
+
+        `abbreviations` (P12) is likewise config-driven now — defaults to
+        `mapping/normalize.py`'s own table when not given (same
+        don't-break-direct-callers reasoning); the live pipeline passes
+        `config.py::load_abbreviations()`'s `column_mappings.yaml`-sourced
+        table instead, so extending tier 3's vocabulary for a new
+        distributor is a config change, not a code change."""
         self._field_entries = field_entries
         self._templates_cfg = templates_cfg
+        self._accept_threshold = accept_threshold
+        self._low_confidence_threshold = low_confidence_threshold
+        self._abbreviations = abbreviations
 
     def resolve(self, header: HeaderNode, ctx: TableContext) -> MappingDecision:
         cached = self._resolve_from_template_cache(header, ctx)
@@ -50,10 +77,10 @@ class DictionaryResolver:
                     combine=entry.combine,
                 )
 
-        header_expanded = expand_abbreviations_path(header.path)
+        header_expanded = expand_abbreviations_path(header.path, self._abbreviations)
         for entry in self._field_entries:
-            path_keys = {expand_abbreviations_path(p) for p in entry.paths}
-            alias_keys = {expand_abbreviations(a) for a in entry.aliases}
+            path_keys = {expand_abbreviations_path(p, self._abbreviations) for p in entry.paths}
+            alias_keys = {expand_abbreviations(a, self._abbreviations) for a in entry.aliases}
             if header_expanded in path_keys or header_expanded in alias_keys:
                 return MappingDecision(
                     source_header=header,
@@ -74,26 +101,25 @@ class DictionaryResolver:
         cached = lookup_fingerprint(ctx.fingerprint, self._templates_cfg)
         if cached is None:
             return None
-        cached_field = cached.get(header.normalized_key)
+        # P13: looked up by the same OCR-noise-tolerant leaf key the
+        # fingerprint itself was built from (detect/fingerprint.py), not
+        # header.normalized_key (bare lowercase+strip) — a table-level
+        # fingerprint hit is only useful if the per-column keys inside it
+        # can still be found for THIS document's own (possibly differently
+        # garbled) header text.
+        leaf_key = leaf_fingerprint_key(header, self._field_entries, self._abbreviations, self._accept_threshold)
+        cached_field = cached.get(leaf_key)
         if cached_field is None:
             return None
         return MappingDecision(source_header=header, canonical_field=cached_field, status=MappingStatus.template_cache)
 
     def _resolve_fuzzy(self, header: HeaderNode) -> MappingDecision | None:
         header_text = " ".join(header.path)
-        best_field: FieldEntry | None = None
-        best_score = 0.0
-        for entry in self._field_entries:
-            candidates = [" ".join(p) for p in entry.paths] + list(entry.aliases)
-            if not candidates:
-                continue
-            match = best_fuzzy_match(header_text, candidates)
-            if match is not None and match[1] > best_score:
-                best_field, best_score = entry, match[1]
-
-        if best_field is None or best_score < LOW_CONFIDENCE_THRESHOLD:
+        match = best_matching_field(header_text, self._field_entries)
+        if match is None or match[1] < self._low_confidence_threshold:
             return None
-        status = MappingStatus.fuzzy if best_score >= ACCEPT_THRESHOLD else MappingStatus.fuzzy_low_confidence
+        best_field, best_score = match
+        status = MappingStatus.fuzzy if best_score >= self._accept_threshold else MappingStatus.fuzzy_low_confidence
         return MappingDecision(
             source_header=header,
             canonical_field=best_field.canonical_field,

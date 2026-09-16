@@ -1,15 +1,21 @@
 """Repository layer (IMPLEMENTATION_PLAN.md P8): writes one document's full
 Level 1/2/3 + review output to the database, and reads the canonical
 Stock & Sale schema back out as a join across those tables for export.
+
+P14 additionally writes/reads the uniform `FinalOutput` table (schemas/
+final_output.py) alongside the existing Level 1/2/3 tables — a new,
+additional reporting view, not a replacement of the detailed schema above.
 """
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from pharma_di.assemble.canonical import LEVEL3_TO_TRANSACTION_FIELD
-from pharma_di.persist.models import Document, Product, ReviewRecord, Transaction
+from pharma_di.config import distributor_address
+from pharma_di.persist.models import Document, FinalOutput, Product, ReviewRecord, Transaction
 from pharma_di.schemas.canonical import CanonicalRow, DocumentRecord, ProductRecord, TransactionRecord
 from pharma_di.schemas.validation import RowValidationResult
 
@@ -55,6 +61,16 @@ def save_document(
     )
     session.add(document)
 
+    # P14: computed once per document, not read back off `document` —
+    # SQLAlchemy's column-level `default=` for Document.created_at isn't
+    # applied to the Python object until flush, so reading it back here
+    # (before the flush at the end of this function) would see None.
+    # Both timestamps mean the same "when this document was ingested"
+    # instant either way — computing it explicitly here is simpler than an
+    # extra mid-function flush just to read a default back.
+    scan_time = dt.datetime.utcnow()
+    address = distributor_address(document_record.distributor_id)
+
     if product_records:
         # Product-level document: one Product + one Transaction per real row.
         for product_rec, txn_rec, canonical_row, validation_result in zip(
@@ -69,7 +85,9 @@ def save_document(
                 rate=product_rec.rate,
             )
             session.add(product)
-            _add_transaction_and_review(session, document, product, txn_rec, canonical_row, validation_result)
+            _add_transaction_and_review(
+                session, document, product, txn_rec, canonical_row, validation_result, scan_time, address
+            )
     else:
         # Summary-only document (CLAUDE.md: "emit a document-level
         # summary... not an error state") — assemble_document still emits
@@ -82,7 +100,9 @@ def save_document(
                 for canon_field, txn_field in LEVEL3_TO_TRANSACTION_FIELD.items()
             }
             txn_rec = TransactionRecord(**txn_kwargs)
-            _add_transaction_and_review(session, document, None, txn_rec, canonical_row, validation_result)
+            _add_transaction_and_review(
+                session, document, None, txn_rec, canonical_row, validation_result, scan_time, address
+            )
 
     session.commit()
 
@@ -94,6 +114,8 @@ def _add_transaction_and_review(
     txn_rec: TransactionRecord,
     canonical_row: CanonicalRow,
     validation_result: RowValidationResult,
+    scan_time: dt.datetime,
+    address: str | None,
 ) -> None:
     transaction = Transaction(
         document=document,
@@ -111,6 +133,7 @@ def _add_transaction_and_review(
         expired_qty=txn_rec.expired_qty,
         closing_qty=txn_rec.closing_qty,
         closing_value=txn_rec.closing_value,
+        dump_qty=txn_rec.dump_qty,
         stock_status=txn_rec.stock_status,
         months_to_expiry=txn_rec.months_to_expiry,
     )
@@ -127,6 +150,22 @@ def _add_transaction_and_review(
         unmapped_columns=dict(canonical_row.unmapped_columns),  # P10: unresolved headers for review UI
     )
     session.add(review)
+
+    final_output = FinalOutput(
+        transaction=transaction,
+        stockist_distributor_name=document.distributor_name,
+        address=address,
+        product_name=canonical_row.product_name_raw,
+        opening_qty=txn_rec.opening_qty,
+        closing_qty=txn_rec.closing_qty,
+        dump_qty=txn_rec.dump_qty,
+        scan_date=scan_time.date(),
+        file_name=document.source_file,
+        scan_by="system",
+        update_by="system",
+        updated_on=scan_time,
+    )
+    session.add(final_output)
 
 
 def load_canonical_rows(session: Session, document_id: str | None = None) -> list[dict[str, Any]]:
@@ -175,6 +214,7 @@ def load_canonical_rows(session: Session, document_id: str | None = None) -> lis
                 "expired_quantity": txn.expired_qty,
                 "closing_quantity": txn.closing_qty,
                 "closing_value": txn.closing_value,
+                "dump_quantity": txn.dump_qty,
                 "months_to_expiry": txn.months_to_expiry,
                 "stock_status": txn.stock_status,
                 "source_field_breakdown": review.source_field_breakdown if review else {},
@@ -188,6 +228,37 @@ def load_canonical_rows(session: Session, document_id: str | None = None) -> lis
                 "unmapped_columns": review.unmapped_columns if review else {},
                 # P10: internal transaction id for the React correction form's transaction_id field
                 "_transaction_id": txn.id,
+            }
+        )
+    return rows
+
+
+def load_final_output_rows(session: Session, document_id: str | None = None) -> list[dict[str, Any]]:
+    """Reads the uniform final output table back out — one dict per
+    FinalOutput row, field names matching schemas/final_output.py::
+    FinalStockSaleRow exactly. Plain dicts for the same reason
+    load_canonical_rows returns plain dicts: no re-validation needed for
+    data that was already schema-valid when written."""
+    query = session.query(FinalOutput).join(Transaction).join(Document)
+    if document_id is not None:
+        query = query.filter(Document.id == document_id)
+
+    rows: list[dict[str, Any]] = []
+    for fo in query.all():
+        rows.append(
+            {
+                "id": fo.id,
+                "stockist_distributor_name": fo.stockist_distributor_name,
+                "address": fo.address,
+                "product_name": fo.product_name,
+                "opening_qty": fo.opening_qty,
+                "closing_qty": fo.closing_qty,
+                "dump_qty": fo.dump_qty,
+                "scan_date": fo.scan_date,
+                "file_name": fo.file_name,
+                "scan_by": fo.scan_by,
+                "update_by": fo.update_by,
+                "updated_on": fo.updated_on,
             }
         )
     return rows

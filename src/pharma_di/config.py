@@ -119,10 +119,36 @@ def load_column_mappings() -> dict[str, Any]:
     return _load_yaml(settings.resolve_path("column_mappings"))
 
 
+def load_abbreviations() -> dict[str, str]:
+    """P12: tier 3's whole-word abbreviation table, now a `column_mappings.
+    yaml` entry instead of a hardcoded Python dict (mapping/normalize.py) —
+    a new distributor's own abbreviation style is a config change, not a
+    code change. Not independently cached: it's a sub-view of the same
+    already-cached `load_column_mappings()` read, so `clear_config_cache()`
+    clearing that one cache already covers this too."""
+    return load_column_mappings().get("abbreviations", {})
+
+
 @lru_cache(maxsize=1)
 def load_distributors() -> dict[str, Any]:
     settings = load_settings()
     return _load_yaml(settings.resolve_path("distributors"))
+
+
+def distributor_address(distributor_id: str | None) -> str | None:
+    """P14: the final-output table's `Address` column source — a config
+    lookup, not page-text extraction (per the project owner's own answer).
+    `config/distributors.yaml` already carries a hand-populated `address`
+    field per known distributor. Returns None for an unresolved
+    `distributor_id` or one not yet in that config — same "route to
+    review rather than guess" discipline an unresolved product already
+    follows, not a special case invented for this field."""
+    if not distributor_id:
+        return None
+    for entry in load_distributors().get("distributors", []):
+        if entry.get("distributor_id") == distributor_id:
+            return entry.get("address")
+    return None
 
 
 @lru_cache(maxsize=1)

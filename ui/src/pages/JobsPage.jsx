@@ -1,14 +1,18 @@
 import { useState, useEffect } from "react";
-import { listJobs, getJob } from "../api";
+import { listJobs } from "../api";
 import StatusBadge from "../components/StatusBadge";
+import Icon from "../components/Icon";
+import { SkeletonTable } from "../components/Skeleton";
 
 /** JobsPage — table of all submitted pipeline jobs with live refresh on Processing jobs. */
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = async (showSpinner = false) => {
+    if (showSpinner) setRefreshing(true);
     try {
       const data = await listJobs();
       setJobs(data);
@@ -16,6 +20,7 @@ export default function JobsPage() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -37,16 +42,22 @@ export default function JobsPage() {
         <h2 className="page-title" style={{ marginBottom: 0 }}>Processing Jobs</h2>
         <div className="flex items-center gap-2">
           {hasPending && <span className="spinner" />}
-          <button className="btn btn-ghost btn-sm" onClick={load}>Refresh</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => load(true)} disabled={refreshing}>
+            <Icon name="refresh" size={13} className={refreshing ? "spin" : ""} />
+            Refresh
+          </button>
         </div>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error"><Icon name="alertTriangle" size={16} />{error}</div>}
 
       {loading ? (
-        <div className="flex items-center gap-2"><span className="spinner" /> Loading…</div>
+        <SkeletonTable rows={4} cols={7} />
       ) : jobs.length === 0 ? (
-        <div className="empty">No jobs yet. Upload a document to start.</div>
+        <div className="empty">
+          <Icon name="activity" size={36} />
+          <p>No jobs yet. Upload a document to start.</p>
+        </div>
       ) : (
         <div className="card">
           <div className="table-scroll">
