@@ -29,6 +29,10 @@ export async function listDocuments() {
   return json(await fetch(`${BASE}/api/documents`));
 }
 
+export async function getOverview() {
+  return json(await fetch(`${BASE}/api/overview`));
+}
+
 export async function getDocument(documentId) {
   return json(await fetch(`${BASE}/api/documents/${documentId}`));
 }

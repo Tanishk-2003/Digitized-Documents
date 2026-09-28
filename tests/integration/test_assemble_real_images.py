@@ -6,14 +6,16 @@ Gated on the OCR cache being warm (same reasoning as test_ocr_real_images.py)
 which both depend on OCR.
 
 Assertions reflect ACTUAL assembled output (inspected directly before
-writing this file), including one honest finding: doc3.jpg's "opening_quantity"
-field is semantically wrong (it holds a currency VALUE, not a quantity) —
-a downstream consequence of the already-documented P3 header-fragmentation
-limitation on this specific document (its "OPENING" header lost its
-"VALUE[PTS]" pairing during header reconstruction), not a new P6 defect.
-`test_doc3_summary_values_reflect_the_known_p3_limitation_honestly` pins
-this down explicitly so it's never silently "fixed" by accident without
-someone noticing the root cause moved.
+writing this file). `test_doc3_summary_values_reflect_the_known_p3_limitation_honestly`
+used to pin down a real, honest finding: doc3.jpg's "opening_quantity" field
+was semantically wrong (it held a currency VALUE, not a quantity) — a
+downstream consequence of the P3 header-fragmentation limitation on this
+document (its "OPENING" header lost its "VALUE[PTS]" pairing during header
+reconstruction). A header-matching fix made for doc9.jpg (see
+layout/regions.py::_matches_any_alias) changed that: the field no longer
+gets the wrong value, though it still doesn't resolve to the right one
+either (opening_value stays None too) — see that test for the updated,
+still-honest assertion.
 """
 from __future__ import annotations
 
@@ -152,16 +154,27 @@ def test_doc3_summary_emits_exactly_one_row_with_no_product_levels():
 
 
 def test_doc3_summary_values_reflect_the_known_p3_limitation_honestly():
-    # Documents a real, already-traced-to-root-cause oddity rather than
-    # silently accepting or hiding it: doc3.jpg's real "OPENING" header
-    # fuzzy-matches opening_quantity (P5's own low-confidence tier), even
-    # though the value is clearly a currency amount (this document has NO
-    # quantity columns at all — CLAUDE.md: "No quantities at all on this
-    # page"). If P3's header-fragmentation limitation is ever fixed, this
-    # specific assertion should start failing — that's the intended signal
-    # to revisit it, not evidence P6 is doing anything wrong today.
+    # This is the flip this test's own docstring anticipated: doc3.jpg's
+    # "OPENING" header used to fuzzy-match opening_quantity (P5's low-
+    # confidence tier) even though the value is a currency amount, not a
+    # quantity — the P3 header-fragmentation limitation this test was
+    # written to pin down. A header-matching fix made while chasing a
+    # different real document (doc9.jpg's truncated "ESCRIPTION" header —
+    # see layout/regions.py::_matches_any_alias) changed doc3's own header
+    # reconstruction too: "OPENING" no longer falsely resolves to
+    # opening_quantity. It doesn't yet correctly resolve to opening_value
+    # either (still None, with an honest null_field_reason rather than a
+    # wrong value) — the underlying P3 fragmentation on this specific
+    # document isn't fully fixed, just no longer silently mislabeling a
+    # currency amount as a quantity. That's a real improvement (CLAUDE.md:
+    # a wrong, confidently-presented value is worse than an honestly-null
+    # one with a reason) even though it isn't a full fix, so this assertion
+    # is updated rather than reverted around.
     _products, _transactions, rows, _errors = _assembled_for("doc3.jpg")
-    assert rows[0].opening_quantity == 109599.61
+    assert rows[0].opening_quantity is None
+    assert rows[0].opening_value is None
+    assert rows[0].null_field_reasons.get("opening_quantity")
+    assert rows[0].null_field_reasons.get("opening_value")
 
 
 def test_every_canonical_row_across_every_document_is_schema_internally_consistent():

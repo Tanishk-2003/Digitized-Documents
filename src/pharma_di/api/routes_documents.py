@@ -14,7 +14,13 @@ from pharma_di.export.excel import export_final_output_to_excel, export_to_excel
 from pharma_di.persist.db import get_session
 from pharma_di.persist.models import Document, ReviewRecord, Transaction
 from pharma_di.persist.repository import load_canonical_rows, load_final_output_rows
-from pharma_di.schemas.api import DocumentDetailResponse, DocumentSummaryResponse, JobResponse
+from pharma_di.schemas.api import (
+    DocumentDetailResponse,
+    DocumentSummaryResponse,
+    JobResponse,
+    JobStatus,
+    OverviewResponse,
+)
 from pharma_di.schemas.final_output import FinalStockSaleRow
 from pharma_di.workers.jobs import default_job_manager
 
@@ -116,6 +122,49 @@ async def list_documents(session: Session = Depends(get_db)) -> list[DocumentSum
             )
         )
     return summaries
+
+
+def _statement_bucket(doc: DocumentSummaryResponse) -> str:
+    """Mirrors ui/src/statementLanguage.js::deriveStatementStatus exactly —
+    kept in sync deliberately (a Python backend and a JS frontend can't
+    literally share the function, but every screen showing a statement's
+    status, including this aggregate, must agree on what "exception" vs.
+    "review" vs. "approved" means for the same underlying document)."""
+    if not doc.distributor_name or doc.row_count == 0:
+        return "exception"
+    if doc.needs_review_count > 0:
+        return "review"
+    return "approved"
+
+
+@router.get(
+    "/overview",
+    response_model=OverviewResponse,
+    summary="Aggregate counts and recent statements for the Overview page",
+)
+async def get_overview(session: Session = Depends(get_db)) -> OverviewResponse:
+    """UI-UX-Implementation.md Phase B.1. Reuses list_documents's own
+    per-document classification (not a second, parallel query) so this
+    never drifts from what the Statements/Review Required pages show for
+    the same documents."""
+    documents = await list_documents(session)
+
+    counts = {"exception": 0, "review": 0, "approved": 0}
+    for doc in documents:
+        counts[_statement_bucket(doc)] += 1
+
+    processing = sum(
+        1 for j in default_job_manager.list_jobs() if j.status in (JobStatus.queued, JobStatus.processing)
+    )
+
+    return OverviewResponse(
+        received=len(documents),
+        processing=processing,
+        review_required=counts["review"],
+        approved=counts["approved"],
+        exceptions=counts["exception"],
+        recent=documents[:5],
+    )
 
 
 @router.get(

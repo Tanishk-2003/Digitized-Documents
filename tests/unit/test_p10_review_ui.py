@@ -26,7 +26,7 @@ from pharma_di.schemas.canonical import (
     ReviewStatus,
     TransactionRecord,
 )
-from pharma_di.schemas.validation import RowValidationResult
+from pharma_di.schemas.validation import ReviewReason, RowValidationResult, RuleId
 
 
 @pytest.fixture()
@@ -93,7 +93,11 @@ def _seed(session: Session, doc_id: str, review_status=ReviewStatus.needs_review
             page_number=1,
             extraction_confidence={"opening_quantity": 0.98, "rate": 0.99},
             review_status=review_status,
-            review_reasons=["r2_totals_discrepancy"] if review_status == ReviewStatus.needs_review else [],
+            review_reasons=(
+                [ReviewReason(code="r2_totals_crossfoot", message="r2_totals_discrepancy", rule_id=RuleId.r2_totals_crossfoot)]
+                if review_status == ReviewStatus.needs_review
+                else []
+            ),
             unmapped_columns={"CUSTOM_COL": ["val1", "val2"]},
         )
     ]
@@ -164,7 +168,7 @@ def test_document_detail_carries_review_reasons(client: TestClient, test_db: Ses
     assert resp.status_code == 200
     rows = resp.json()["canonical_rows"]
     assert rows[0]["review_status"] == "needs_review"
-    assert "r2_totals_discrepancy" in (rows[0].get("review_reasons") or [])
+    assert any(r["message"] == "r2_totals_discrepancy" for r in (rows[0].get("review_reasons") or []))
 
 
 def test_review_queue_returns_source_file(client: TestClient, test_db: Session):

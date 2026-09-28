@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { getDocument, approveDocument, correctDocument } from "../api";
 import ConfBar from "../components/ConfBar";
-import StatusBadge from "../components/StatusBadge";
 import Icon from "../components/Icon";
 import { useToast } from "../components/Toast";
+import { normalizeReason, ruleLabel } from "../statementLanguage";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -52,20 +52,53 @@ function fieldLabel(key) {
  */
 function imageUrl(sourceFile) {
   if (!sourceFile) return null;
-  // Normalize backslashes -> forward slashes
   const normalized = sourceFile.replace(/\\/g, "/");
-  // Find the 'data/' segment and take everything after it
   const idx = normalized.toLowerCase().indexOf("/data/");
   if (idx !== -1) {
-    return `${BASE}/api/static${normalized.slice(idx + 5)}`; // "/data" is 5 chars
+    return `${BASE}/api/static${normalized.slice(idx + 5)}`;
   }
-  // Fallback: just use the basename under uploads/
   const fname = normalized.split("/").pop();
   return `${BASE}/api/static/uploads/${fname}`;
 }
 
-/** Single row correction panel — shown when user clicks "Correct" on a row. */
-function RowCorrectPanel({ row, onSave, onCancel }) {
+function SourceDocumentPanel({ doc }) {
+  const imgSrc = imageUrl(doc.source_file);
+  return (
+    <div className="card" style={{ position: "sticky", top: 20, alignSelf: "flex-start" }}>
+      <div className="section-title">Original Statement</div>
+      {imgSrc ? (
+        <img
+          src={imgSrc}
+          alt="Source document"
+          className="doc-image"
+          onError={(e) => {
+            e.target.style.display = "none";
+            e.target.nextSibling.style.display = "flex";
+          }}
+        />
+      ) : null}
+      <div className="doc-image-empty flex-col items-center" style={{ display: imgSrc ? "none" : "flex" }}>
+        <Icon name="image" size={28} style={{ marginBottom: 8 }} />
+        Image not available
+      </div>
+      <div className="mt-2 text-sm text-muted">
+        <div>File: <span className="font-mono">{doc.source_file?.split(/[\\/]/).pop() ?? "—"}</span></div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * IssuePanel — one flagged row shown as a single focused "issue" (brief §7/§10):
+ * every field of the row, a plain-language reason for why it's flagged, and
+ * Correct/Accept actions. Not decomposed to one issue per field — R1/R2/R3/
+ * R5/R7 are row- or table-level checks with no single implicated field, so
+ * "one issue = one flagged row" is the honest granularity the real
+ * validation data supports (R6_confidence_gate, the one genuinely per-field
+ * rule, still highlights its specific low-confidence fields within the row).
+ */
+function IssuePanel({ row, issueNumber, totalIssues, onAccept, onSaveCorrection }) {
+  const [correcting, setCorrecting] = useState(false);
   const [edits, setEdits] = useState({});
 
   const set = (k, v) => setEdits((prev) => ({ ...prev, [k]: v }));
@@ -79,34 +112,96 @@ function RowCorrectPanel({ row, onSave, onCancel }) {
         original_value: String(row[field_name] ?? ""),
         corrected_value,
       }));
-    onSave(corrections);
+    onSaveCorrection(corrections);
+    setCorrecting(false);
+    setEdits({});
   };
 
+  const reasons = (row.review_reasons ?? []).map(normalizeReason);
+  const visibleFields = TRANSACTION_FIELDS.filter((k) => row[k] != null || NUMERIC_FIELDS.has(k));
+
   return (
-    <div style={{ padding: "12px 0" }}>
-      <div className="section-title">Correct Fields — {row.product_name_raw ?? "Row"}</div>
-      {TRANSACTION_FIELDS.map((key) => {
-        const orig = row[key];
-        if (orig == null && !edits[key]) return null; // skip truly absent fields
-        return (
-          <div key={key} className="field-row">
-            <span className="field-label text-sm">{fieldLabel(key)}</span>
-            <span className="field-val">{String(orig ?? "—")}</span>
-            <div className="field-input">
-              <input
-                type="text"
-                placeholder={String(orig ?? "")}
-                value={edits[key] ?? ""}
-                onChange={(e) => set(key, e.target.value)}
-              />
-            </div>
-          </div>
-        );
-      })}
-      <div className="flex gap-2 mt-3">
-        <button className="btn btn-success btn-sm" onClick={save}><Icon name="check" size={13} />Save Corrections</button>
-        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+    <div className="card issue-panel">
+      <div className="flex items-center justify-between mb-2">
+        <div className="section-title" style={{ marginBottom: 0 }}>
+          Issue {issueNumber} of {totalIssues}
+        </div>
+        <span className="badge badge-warning">Needs your attention</span>
       </div>
+
+      <div className="issue-panel-title">{row.product_name_raw ?? "This row"}</div>
+      {row.hsn_code && <span className="badge badge-muted mt-1">HSN {row.hsn_code}</span>}
+
+      {reasons.length > 0 && (
+        <div className="alert alert-info mt-2" style={{ marginBottom: 0 }}>
+          <Icon name="alertTriangle" size={15} />
+          <div>
+            {reasons.map((r, i) => (
+              <div key={i}>
+                {ruleLabel(r.rule_id)}
+                {i === 0 && (
+                  <details style={{ display: "inline" }}>
+                    <summary style={{ display: "inline", cursor: "pointer", marginLeft: 6, fontSize: 11, color: "var(--muted)" }}>
+                      technical detail
+                    </summary>
+                    <span className="text-sm text-muted"> — {r.message}</span>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {correcting ? (
+        <div style={{ marginTop: 14 }}>
+          {visibleFields.map((key) => {
+            const orig = row[key];
+            return (
+              <div key={key} className="field-row">
+                <span className="field-label text-sm">{fieldLabel(key)}</span>
+                <span className="field-val">{String(orig ?? "—")}</span>
+                <div className="field-input">
+                  <input
+                    type="text"
+                    placeholder={String(orig ?? "")}
+                    value={edits[key] ?? ""}
+                    onChange={(e) => set(key, e.target.value)}
+                  />
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex gap-2 mt-3">
+            <button className="btn btn-success btn-sm" onClick={save}><Icon name="check" size={13} />Save &amp; Next Issue</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setCorrecting(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="row-card-field-grid mt-3">
+            {visibleFields.map((key) => {
+              const val = row[key];
+              if (val == null) return null;
+              const conf =
+                typeof row.extraction_confidence === "object" && row.extraction_confidence !== null
+                  ? row.extraction_confidence[key]
+                  : null;
+              return (
+                <div key={key} className="row-card-field">
+                  <span className="row-card-field-label">{fieldLabel(key)}</span>
+                  <span className="row-card-field-val">{String(val)}</span>
+                  {conf != null ? <ConfBar score={conf} variant="business" /> : <span style={{ fontSize: 11, color: "var(--muted)" }}>—</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button className="btn btn-ghost" onClick={() => setCorrecting(true)}><Icon name="edit" size={13} />Correct</button>
+            <button className="btn btn-primary" onClick={onAccept}><Icon name="check" size={13} />Accept</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -114,24 +209,36 @@ function RowCorrectPanel({ row, onSave, onCancel }) {
 /**
  * DocumentReviewPage
  * ==================
- * Shows the original document image (left) beside a table of extracted canonical rows (right).
- * Each row has a per-field confidence bar, approve button, and correct form.
- * Corrections are sent to POST /api/review/{doc_id}/correct and promote aliases to
- * config/column_mappings.yaml via the backend's add_column_alias() feedback loop.
+ * UI-UX-Implementation.md Phase A.4: an issue-by-issue review workflow
+ * (Review issue -> Correct/Accept -> auto-advance -> Approve Statement)
+ * replacing the old "open every row's edit form individually" pattern, plus
+ * gated approval (can't approve while issues remain) and, when opened from
+ * the Review Required queue, Previous/Next Statement navigation so a
+ * reviewer working through many statements never has to go back to the
+ * list between them.
+ *
+ * All of this runs over the *existing* /api/review/{id}/correct and
+ * /api/review/{id}/approve endpoints — Accept/Correct-and-save only update
+ * local state as the reviewer moves through the queue; the network calls
+ * happen once, when they click "Approve Statement" (correct_document first
+ * if anything was corrected, then approve_document to flip any remaining
+ * accepted-as-is rows) — see UI-UX-Implementation.md's grounding note 4.
  */
-export default function DocumentReviewPage({ documentId, onBack }) {
+export default function DocumentReviewPage({ documentId, queueIds, onBack, onNavigate }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [correctingRowIdx, setCorrectingRowIdx] = useState(null);
-  const [pendingCorrections, setPendingCorrections] = useState([]); // accumulated row corrections
-  const [pendingMappings, setPendingMappings] = useState([]); // column alias corrections
+  const [resolvedIndices, setResolvedIndices] = useState(new Set());
+  const [pendingCorrections, setPendingCorrections] = useState([]);
+  const [pendingMappings, setPendingMappings] = useState([]);
   const [approving, setApproving] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const showToast = useToast();
 
   const load = () => {
     setLoading(true);
+    setResolvedIndices(new Set());
+    setPendingCorrections([]);
+    setPendingMappings([]);
     getDocument(documentId)
       .then(setDetail)
       .catch((e) => setError(e.message))
@@ -140,12 +247,24 @@ export default function DocumentReviewPage({ documentId, onBack }) {
 
   useEffect(load, [documentId]);
 
-  const handleApproveAll = async () => {
+  const handleAccept = (rowIdx) => {
+    setResolvedIndices((prev) => new Set(prev).add(rowIdx));
+  };
+
+  const handleSaveCorrection = (rowIdx, corrections) => {
+    setPendingCorrections((prev) => [...prev, ...corrections]);
+    setResolvedIndices((prev) => new Set(prev).add(rowIdx));
+  };
+
+  const handleApproveStatement = async () => {
     setApproving(true);
     setError(null);
     try {
-      const res = await approveDocument(documentId, "Approved via UI");
-      showToast(`${res.updated_rows} row${res.updated_rows === 1 ? "" : "s"} marked as approved`);
+      if (pendingCorrections.length > 0 || pendingMappings.length > 0) {
+        await correctDocument(documentId, { columnMappings: pendingMappings, rowCorrections: pendingCorrections });
+      }
+      await approveDocument(documentId, "Approved via UI");
+      showToast("Statement approved");
       load();
     } catch (e) {
       setError(e.message);
@@ -154,46 +273,35 @@ export default function DocumentReviewPage({ documentId, onBack }) {
     }
   };
 
-  const handleRowCorrections = (corrections) => {
-    setPendingCorrections((prev) => [...prev, ...corrections]);
-    setCorrectingRowIdx(null);
-  };
-
-  const handleSubmitAll = async () => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await correctDocument(documentId, {
-        columnMappings: pendingMappings,
-        rowCorrections: pendingCorrections,
-      });
-      const parts = [];
-      if (res.updated_rows) parts.push(`${res.updated_rows} row correction(s) saved`);
-      if (res.promoted_mappings?.length) {
-        parts.push(`${res.promoted_mappings.length} column alias(es) promoted`);
-      }
-      showToast(parts.join(" · ") || "Corrections saved");
-      setPendingCorrections([]);
-      setPendingMappings([]);
-      load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (loading) return <div className="flex items-center gap-2 mt-4"><span className="spinner" /> Loading document…</div>;
+  if (loading) return <div className="flex items-center gap-2 mt-4"><span className="spinner" /> Loading statement…</div>;
   if (error && !detail) return <div className="alert alert-error"><Icon name="alertTriangle" size={16} />{error}</div>;
   if (!detail) return null;
 
-  const { document: doc, canonical_rows: rows } = detail;
-  const imgSrc = imageUrl(doc.source_file);
+  const { document: doc, canonical_rows: allRows } = detail;
+  const rows = allRows.map((r, idx) => ({ ...r, _rowIdx: idx }));
   const flaggedRows = rows.filter((r) => r.review_status === "needs_review");
-  const hasPending = pendingCorrections.length > 0 || pendingMappings.length > 0;
+  const currentIssue = flaggedRows.find((r) => !resolvedIndices.has(r._rowIdx));
+  const allResolved = flaggedRows.length === 0 || !currentIssue;
+  const resolvedCount = flaggedRows.filter((r) => resolvedIndices.has(r._rowIdx)).length;
+
+  const queuePos = queueIds ? queueIds.indexOf(documentId) : -1;
+  const hasPrev = queueIds && queuePos > 0;
+  const hasNext = queueIds && queuePos >= 0 && queuePos < queueIds.length - 1;
 
   return (
     <div>
+      {queueIds && queuePos >= 0 && (
+        <div className="statement-nav mb-3">
+          <button className="btn btn-ghost btn-sm" disabled={!hasPrev} onClick={() => onNavigate(queueIds[queuePos - 1])}>
+            <Icon name="arrowLeft" size={13} />Previous Statement
+          </button>
+          <span className="text-sm text-muted">{queuePos + 1} of {queueIds.length}</span>
+          <button className="btn btn-ghost btn-sm" disabled={!hasNext} onClick={() => onNavigate(queueIds[queuePos + 1])}>
+            Next Statement<Icon name="arrowRight" size={13} />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrowLeft" size={14} />Back</button>
@@ -204,166 +312,69 @@ export default function DocumentReviewPage({ documentId, onBack }) {
           </h2>
           <div className="text-sm text-muted">
             {doc.statement_from && <span>{doc.statement_from} → {doc.statement_to} · </span>}
-            {doc.row_count} rows · {doc.needs_review_count} flagged
+            {doc.row_count} products
           </div>
         </div>
-        <div className="flex gap-2">
-          {hasPending && (
-            <button
-              className="btn btn-primary"
-              onClick={handleSubmitAll}
-              disabled={submitting}
-            >
-              {submitting && <span className="spinner" />}
-              {submitting ? "Saving…" : `Submit Corrections (${pendingCorrections.length})`}
-            </button>
-          )}
-          <button
-            className="btn btn-success"
-            onClick={handleApproveAll}
-            disabled={approving}
-          >
+        {allResolved ? (
+          <button className="btn btn-success" onClick={handleApproveStatement} disabled={approving}>
             {approving ? <span className="spinner" /> : <Icon name="check" size={14} />}
-            {approving ? "Approving…" : "Approve All"}
+            {approving ? "Approving…" : "Approve Statement"}
           </button>
-        </div>
+        ) : (
+          <span className="badge badge-warning">{flaggedRows.length - resolvedCount} issue{flaggedRows.length - resolvedCount === 1 ? "" : "s"} remaining</span>
+        )}
       </div>
 
       {error && <div className="alert alert-error"><Icon name="alertTriangle" size={16} />{error}</div>}
 
-      {pendingCorrections.length > 0 && (
-        <div className="alert alert-info">
-          <Icon name="edit" size={15} />
-          {pendingCorrections.length} unsaved correction(s). Click "Submit Corrections" to persist and promote column aliases.
+      {allResolved && flaggedRows.length > 0 && (
+        <div className="alert alert-success">
+          <Icon name="checkCircle" size={16} />
+          All {flaggedRows.length} issue{flaggedRows.length === 1 ? "" : "s"} resolved — {doc.row_count} of {doc.row_count} products verified.
         </div>
       )}
 
       <div className="review-split">
-        {/* LEFT: Source document image */}
-        <div className="card" style={{ position: "sticky", top: 20, alignSelf: "flex-start" }}>
-          <div className="section-title">Source Document</div>
-          {imgSrc ? (
-            <img
-              src={imgSrc}
-              alt="Source document"
-              className="doc-image"
-              onError={(e) => {
-                e.target.style.display = "none";
-                e.target.nextSibling.style.display = "flex";
-              }}
-            />
-          ) : null}
-          <div className="doc-image-empty flex-col items-center" style={{ display: imgSrc ? "none" : "flex" }}>
-            <Icon name="image" size={28} style={{ marginBottom: 8 }} />
-            Image not available
-            {doc.source_file && (
-              <div className="text-sm mt-1 font-mono">{doc.source_file}</div>
-            )}
-          </div>
-          <div className="mt-2 text-sm text-muted">
-            <div>File: <span className="font-mono">{doc.source_file?.split(/[\\/]/).pop() ?? "—"}</span></div>
-            <div>Type: {doc.document_type ?? "—"}</div>
-          </div>
-        </div>
+        <SourceDocumentPanel doc={doc} />
 
-        {/* RIGHT: Extracted rows with confidence bars */}
         <div>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div className="section-title">
-              Extracted Rows ({rows.length}) — {flaggedRows.length} flagged
-            </div>
-
-            {rows.length === 0 && (
-              <div className="empty">No canonical rows for this document.</div>
-            )}
-
-            {rows.map((row, idx) => {
-              const isFlagged = row.review_status === "needs_review";
-              const isCorrectingThis = correctingRowIdx === idx;
-
-              return (
-                <div key={idx} className={`row-card${isFlagged ? " flagged" : ""}`}>
-                  {/* Row header */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="row-card-title">
-                        {row.product_name_raw ?? `Row ${idx + 1}`}
-                      </span>
-                      {row.hsn_code && (
-                        <span className="badge badge-muted" style={{ marginLeft: 8 }}>
-                          HSN {row.hsn_code}
-                        </span>
-                      )}
-                      {row.pack && (
-                        <span className="text-sm text-muted" style={{ marginLeft: 6 }}>
-                          {row.pack}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <StatusBadge status={row.review_status} />
-                      {!isCorrectingThis && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setCorrectingRowIdx(idx)}
-                        >
-                          <Icon name="edit" size={12} />Correct
-                        </button>
-                      )}
-                    </div>
+          {!allResolved && currentIssue ? (
+            <IssuePanel
+              row={currentIssue}
+              issueNumber={resolvedCount + 1}
+              totalIssues={flaggedRows.length}
+              onAccept={() => handleAccept(currentIssue._rowIdx)}
+              onSaveCorrection={(corrections) => handleSaveCorrection(currentIssue._rowIdx, corrections)}
+            />
+          ) : (
+            <div className="card">
+              <div className="section-title">All Products ({rows.length})</div>
+              {rows.map((row) => {
+                // row.review_status still reflects server state as of the
+                // last load() — it stays "needs_review" until the reviewer
+                // actually clicks Approve Statement, so a row's LOCAL
+                // resolution (accepted vs. corrected vs. never flagged) has
+                // to be derived from resolvedIndices/pendingCorrections
+                // here, not read off review_status directly.
+                const wasCorrected = pendingCorrections.some((c) => c.transaction_id === row._transaction_id);
+                const label = row.review_status === "auto_accepted" ? "Verified" : wasCorrected ? "Corrected" : "Accepted";
+                return (
+                  <div key={row._rowIdx} className="flex items-center justify-between" style={{ padding: "8px 0", borderBottom: "1px solid var(--bg)" }}>
+                    <span className="text-sm">{row.product_name_raw ?? `Row ${row._rowIdx + 1}`}</span>
+                    <span className="badge badge-success">
+                      <Icon name="check" size={11} />
+                      {label}
+                    </span>
                   </div>
+                );
+              })}
+            </div>
+          )}
 
-                  {/* Review reasons */}
-                  {isFlagged && row.review_reasons?.length > 0 && (
-                    <div className="reasons mt-1 text-sm flex items-start gap-2">
-                      <Icon name="alertTriangle" size={12} style={{ marginTop: 2, flexShrink: 0 }} />
-                      <span>{Array.isArray(row.review_reasons) ? row.review_reasons.join(" · ") : row.review_reasons}</span>
-                    </div>
-                  )}
-
-                  {/* Correction form (expanded) */}
-                  {isCorrectingThis && (
-                    <RowCorrectPanel
-                      row={row}
-                      onSave={handleRowCorrections}
-                      onCancel={() => setCorrectingRowIdx(null)}
-                    />
-                  )}
-
-                  {/* Confidence bars for key numeric fields */}
-                  {!isCorrectingThis && (
-                    <div className="row-card-field-grid">
-                      {TRANSACTION_FIELDS.filter((k) => row[k] != null || NUMERIC_FIELDS.has(k)).map((key) => {
-                        const val = row[key];
-                        if (val == null) return null;
-                        // Confidence keys follow pattern: field_name + "_confidence" but the backend
-                        // stores per-field conf in extraction_confidence dict (JSON column)
-                        const conf =
-                          typeof row.extraction_confidence === "object" && row.extraction_confidence !== null
-                            ? row.extraction_confidence[key]
-                            : null;
-                        return (
-                          <div key={key} className="row-card-field">
-                            <span className="row-card-field-label">{fieldLabel(key)}</span>
-                            <span className="row-card-field-val">{String(val)}</span>
-                            {conf != null ? (
-                              <ConfBar score={conf} />
-                            ) : (
-                              <span style={{ fontSize: 11, color: "var(--muted)" }}>—</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Unresolved columns section */}
           {rows.some((r) => r.unmapped_columns && Object.keys(r.unmapped_columns).length > 0) && (
-            <UnmappedColumnPanel rows={rows} onAddMapping={(m) => setPendingMappings((prev) => [...prev, m])} />
+            <div className="mt-4">
+              <UnmappedColumnPanel rows={rows} onAddMapping={(m) => setPendingMappings((prev) => [...prev, m])} />
+            </div>
           )}
         </div>
       </div>
@@ -388,7 +399,6 @@ const CANONICAL_FIELDS = [
 ];
 
 function UnmappedColumnPanel({ rows, onAddMapping }) {
-  // Collect unique unresolved source headers across all rows
   const headers = new Set();
   rows.forEach((r) => {
     if (r.unmapped_columns && typeof r.unmapped_columns === "object") {
@@ -442,7 +452,7 @@ function UnmappedColumnPanel({ rows, onAddMapping }) {
         </div>
       ))}
       <p className="text-sm text-muted mt-2">
-        Queued aliases are submitted together with row corrections when you click "Submit Corrections".
+        Queued aliases are submitted together when you approve the statement.
       </p>
     </div>
   );

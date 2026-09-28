@@ -242,11 +242,20 @@ def detect_document(state: PipelineState) -> dict:
         section_label_texts = [
             text for table in state.layout_result.tables for text in table.section_label_rows.values()
         ]
+        # Last-resort fallback candidate, tried only when header/statement_meta
+        # and section-label text don't resolve an identity match: the whole
+        # page's raw OCR text. See detect_distributor's docstring (doc9.jpg) -
+        # a signature-block identity line can land in whatever region type
+        # region segmentation falls back to when its own anchor phrasing
+        # ("Authorised By:") doesn't match a known footer anchor, so
+        # searching the region text alone isn't reliable enough on its own.
+        full_page_text = " ".join(t.text for t in state.ocr_page.tokens)
+        identity_extra_texts = [*section_label_texts, full_page_text]
 
         distributor_id, distributor_name, _confidence = detect_document_module.detect_distributor(
-            header_text, distributors_cfg
+            header_text, distributors_cfg, identity_extra_texts
         )
-        company_name = detect_document_module.detect_company(header_text, distributors_cfg, section_label_texts)
+        company_name = detect_document_module.detect_company(header_text, distributors_cfg, identity_extra_texts)
         statement_from, statement_to = detect_document_module.detect_period(header_text)
 
         column_mappings_cfg = load_column_mappings()

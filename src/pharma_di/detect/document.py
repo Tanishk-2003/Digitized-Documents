@@ -84,7 +84,9 @@ def header_region_text(tokens: list[OcrToken], regions: list[Region]) -> str:
     return " ".join(t.text for t in sorted(matched, key=lambda t: (t.bbox.y0, t.bbox.x0)))
 
 
-def detect_distributor(text: str, distributors_cfg: dict[str, Any]) -> tuple[str | None, str | None, float]:
+def detect_distributor(
+    text: str, distributors_cfg: dict[str, Any], extra_texts: list[str] | None = None
+) -> tuple[str | None, str | None, float]:
     """Returns (distributor_id, distributor_name, confidence in [0, 1]).
 
     GSTIN, when present, is checked first and short-circuits to an exact
@@ -95,9 +97,23 @@ def detect_distributor(text: str, distributors_cfg: dict[str, Any]) -> tuple[str
     perfectly and matches config/distributors.yaml exactly). Falls through
     to fuzzy alias matching otherwise, at the same acceptance threshold P5's
     mapping tiers use (section 4.6).
+
+    `extra_texts` mirrors detect_company's own fallback-candidates pattern:
+    pass whole-page OCR text here (see graph/nodes.py::detect_document) so a
+    distributor identity block that region segmentation didn't classify as
+    page_header/statement_meta still resolves. Found on doc9.jpg: "M/S ARATI
+    ENTERPRISE" sits in a signature-block line ("Authorised By:") that
+    doesn't match any known page_footer anchor phrase, so it landed in
+    whatever region type the classifier fell back to instead — chasing every
+    real-world phrasing of a signature block is a losing game, so this
+    fallback searches the whole page instead of the region text alone.
+    header/statement_meta text stays the FIRST candidate (highest-priority
+    on a tie) precisely because it's the reliable, common case; the full
+    page is a last-resort net, not the primary signal.
     """
-    compact = text.replace(" ", "")
-    gstin_match = _GSTIN_PATTERN.search(compact)
+    candidates = [text, *(extra_texts or [])]
+    combined_compact = "".join(c.replace(" ", "") for c in candidates if c)
+    gstin_match = _GSTIN_PATTERN.search(combined_compact)
     if gstin_match:
         found = gstin_match.group(0)
         for d in distributors_cfg.get("distributors", []):
@@ -107,9 +123,12 @@ def detect_distributor(text: str, distributors_cfg: dict[str, Any]) -> tuple[str
     best: tuple[str, str, float] | None = None
     for d in distributors_cfg.get("distributors", []):
         for alias in [d["name"], *d.get("aliases", [])]:
-            score = fuzz.partial_ratio(alias.upper(), text.upper())
-            if score >= _NAME_FUZZY_THRESHOLD and (best is None or score > best[2]):
-                best = (d["distributor_id"], d["name"], score / 100.0)
+            for candidate_text in candidates:
+                if not candidate_text:
+                    continue
+                score = fuzz.partial_ratio(alias.upper(), candidate_text.upper())
+                if score >= _NAME_FUZZY_THRESHOLD and (best is None or score > best[2]):
+                    best = (d["distributor_id"], d["name"], score / 100.0)
     return best if best is not None else (None, None, 0.0)
 
 

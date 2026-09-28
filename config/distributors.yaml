@@ -52,8 +52,29 @@ distributors:
     template_family: "marg"
     source_documents: ["doc6.jpg"]
 
+  # Seeded from a real live upload (doc9, 2026-09), not from planning-time
+  # doc1-doc6 review like the entries above. That source photo is unusually
+  # low-contrast/fold-creased (see IMPLEMENTATION_PLAN.md's P17+ notes) -
+  # name/alias is read at 0.97 OCR confidence and clearly legible on direct
+  # inspection, but phone/GSTIN were NOT legible enough to transcribe with
+  # confidence and are deliberately omitted rather than guessed; address is
+  # best-effort and should be re-verified against a clearer statement before
+  # being treated as authoritative.
+  - distributor_id: "arati-enterprise"
+    name: "M/S Arati Enterprise"
+    aliases: ["ARATI ENTERPRISE", "M/S ARATI ENTERPRISE"]
+    address: "R.K. Mission Road, Dharmanagar, North Tripura"
+    template_family: "marg"
+    source_documents: []
+
 companies:
   - company_name: "Eris Lifescience Limited"
     aliases: ["ERIS LIFESCIENCE", "ERIS LIFESCIENCE LIMITED (PHARMA DIVISION)"]
   - company_name: "Zorvia Healthcare Limited"
     aliases: ["ZORVIA HEALTHCARE", "ZORVIA HEALTHCARE LTD", "ZORVIA HEALTHCARE LIMITED(ZFORCE 1)(ZH)"]
+  # Also seeded from doc9 (see the arati-enterprise note above) - a distinct
+  # legal entity from Eris Lifescience Limited above (THERAPEUTICS vs
+  # LIFESCIENCE), not a fuzzy-match variant of it; kept as its own entry
+  # rather than added as an alias of the wrong company.
+  - company_name: "Eris Therapeutics Ltd"
+    aliases: ["ERIS THERAPEUTICS", "ERIS THERAPEUTICS LTD"]

@@ -191,7 +191,11 @@ def test_doc6_review_status_and_reasons_survive_the_round_trip(tmp_path):
 
     for original, persisted in zip(rows, loaded):
         assert persisted["review_status"] == original.review_status.value
-        assert persisted["review_reasons"] == original.review_reasons
+        # review_reasons is now list[ReviewReason] on the Pydantic side but
+        # round-trips through the JSON column as plain dicts (persist/
+        # repository.py's own model_dump(mode="json") on write) — same
+        # comparison shape both sides need.
+        assert persisted["review_reasons"] == [r.model_dump(mode="json") for r in original.review_reasons]
 
 
 def test_doc6_resolved_product_ids_survive_the_round_trip(tmp_path):

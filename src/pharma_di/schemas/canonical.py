@@ -23,6 +23,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from pharma_di.schemas.validation import ReviewReason
+
 
 class DocumentType(str, Enum):
     summary = "summary"
@@ -130,7 +132,17 @@ class CanonicalRow(BaseModel):
     page_number: int = Field(ge=1)
     extraction_confidence: dict[str, float] = Field(default_factory=dict)  # per FIELD, not per row
     review_status: ReviewStatus = ReviewStatus.needs_review
-    review_reasons: list[str] = Field(default_factory=list)
+    # UI-UX-Implementation.md Phase A.2: used to be list[str] — a pre-formatted
+    # sentence like "1 field(s) below 0.85: worst is dump_quantity at 0.83" was
+    # the actual stored value, with no way for a UI to tell rules apart or
+    # phrase them in business language without parsing that sentence. Now
+    # carries the same ReviewReason (code/message/rule_id) validate/engine.py
+    # already builds per failed rule — it used to be flattened to `.message`
+    # right before landing here (validate/engine.py's own row.model_copy
+    # call); now it isn't. `rule_id` is the finite, stable discriminator
+    # (R1-R7) a UI needs to render its own business-friendly label per rule,
+    # independent of `message`'s exact technical wording.
+    review_reasons: list[ReviewReason] = Field(default_factory=list)
 
     # checklist: "Every field ... populated or explicitly null with a reason"
     null_field_reasons: dict[str, str] = Field(default_factory=dict)

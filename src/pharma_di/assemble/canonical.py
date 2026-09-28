@@ -58,8 +58,14 @@ LEVEL3_TO_TRANSACTION_FIELD = {
 # scenario. Both now derive their own filtered view from this one list
 # instead of re-declaring it.
 LEVEL3_CANONICAL_FIELDS = list(LEVEL3_TO_TRANSACTION_FIELD)
-_PRODUCT_CANONICAL_FIELDS = ["product_name_raw", "hsn_code", "pack", "rate"]
-_STRING_CANONICAL_FIELDS = {"stock_status", "product_name_raw", "hsn_code", "pack"}
+# Public since UI-UX-Implementation.md Phase A.4, same reasoning as
+# LEVEL3_CANONICAL_FIELDS above: api/routes_review.py::correct_document
+# needs the same field taxonomy this module already has, to actually apply
+# a correction's value (previously it only ever wrote to the Correction
+# audit table — see that function's own docstring for the real gap this
+# closes).
+PRODUCT_CANONICAL_FIELDS = ["product_name_raw", "hsn_code", "pack", "rate"]
+STRING_CANONICAL_FIELDS = {"stock_status", "product_name_raw", "hsn_code", "pack"}
 
 
 def _parse_cell_value(text: str, canonical_field: str) -> float | str | None:
@@ -70,7 +76,7 @@ def _parse_cell_value(text: str, canonical_field: str) -> float | str | None:
     stripped = text.strip()
     if not stripped:
         return None
-    if canonical_field in _STRING_CANONICAL_FIELDS:
+    if canonical_field in STRING_CANONICAL_FIELDS:
         return stripped
     if not is_numeric(stripped):
         return None

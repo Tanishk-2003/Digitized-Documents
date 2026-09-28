@@ -5,10 +5,14 @@ import { SkeletonTable } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 
 /**
- * FinalOutputPage — the uniform 12-column Stock & Sale table (P14/P16),
- * built from every persisted document regardless of its original layout.
- * Sortable by any column, filterable by distributor/product/file name,
- * with a one-click Excel export of everything currently shown.
+ * ApprovedDataPage — UI-UX-Implementation.md Phase A.5 (was FinalOutputPage,
+ * "Final Output"). Same uniform 12-column Stock & Sale table (P14/P16),
+ * built from every persisted document regardless of its original layout —
+ * renamed because "Approved Data" is what this table actually represents
+ * from a business standpoint (the output of the review/approve workflow),
+ * not an engineering-stage label. Sortable by any column, filterable by
+ * distributor/product/file name, with a one-click Excel export of
+ * everything currently shown.
  */
 
 const COLUMNS = [
@@ -44,7 +48,7 @@ function compareValues(a, b, numeric) {
   return String(a).localeCompare(String(b));
 }
 
-export default function FinalOutputPage() {
+export default function ApprovedDataPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -93,7 +97,7 @@ export default function FinalOutputPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "final_output_all.xlsx";
+      a.download = "approved_data.xlsx";
       a.click();
       URL.revokeObjectURL(url);
       showToast(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"}`);
@@ -107,7 +111,7 @@ export default function FinalOutputPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="page-title" style={{ marginBottom: 0 }}>Final Output</h2>
+        <h2 className="page-title" style={{ marginBottom: 0 }}>Approved Data</h2>
         <div className="flex items-center gap-2">
           <div style={{ position: "relative" }}>
             <Icon name="search" size={14} style={{ position: "absolute", left: 10, top: 10, color: "var(--muted-light)" }} />
@@ -133,7 +137,7 @@ export default function FinalOutputPage() {
       ) : rows.length === 0 ? (
         <div className="empty">
           <Icon name="grid" size={36} />
-          <p>No final output rows yet. Process a document first.</p>
+          <p>No approved data yet. Statements land here once review is complete.</p>
         </div>
       ) : visibleRows.length === 0 ? (
         <div className="empty">

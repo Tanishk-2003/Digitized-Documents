@@ -1,12 +1,14 @@
 """Review queue management and human correction feedback loop routes (IMPLEMENTATION_PLAN.md P9/P10)."""
 from __future__ import annotations
 
+from collections import Counter
 import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from pharma_di.api.routes_documents import get_db
+from pharma_di.assemble.canonical import LEVEL3_TO_TRANSACTION_FIELD, PRODUCT_CANONICAL_FIELDS, STRING_CANONICAL_FIELDS
 from pharma_di.mapping.update import add_column_alias
 from pharma_di.persist.models import Correction, Document, ReviewRecord, Transaction
 from pharma_di.schemas.api import (
@@ -15,8 +17,50 @@ from pharma_di.schemas.api import (
     CorrectionRequest,
     CorrectionResponse,
     ReviewQueueItem,
+    ReviewReasonSummary,
 )
 from pharma_di.schemas.canonical import ReviewStatus
+
+# UI-UX-Implementation.md Phase A.4 / a real, pre-existing gap this closes
+# (flagged honestly in this project's own history rather than fixed in a
+# rush at the time): FinalOutput is its own stored table (P14), not a
+# computed view over Transaction/Product, so a correction that changes one
+# of these four fields has to be written there too or the "Approved Data"
+# export would keep showing the pre-correction value forever.
+_FINAL_OUTPUT_FIELD = {
+    "product_name_raw": "product_name",
+    "opening_quantity": "opening_qty",
+    "closing_quantity": "closing_qty",
+    "dump_quantity": "dump_qty",
+}
+
+
+def _apply_correction(txn: Transaction, field_name: str, raw_value: str) -> None:
+    """Actually applies a correction's value to the real column it belongs
+    to. Until this existed, correct_document only ever wrote to the
+    Correction audit table and flipped review_status — the corrected value
+    itself never reached Transaction, Product, or FinalOutput, so "Correct"
+    looked like it worked but silently didn't change the stored or exported
+    data. Unrecognized field names are left alone rather than guessed at;
+    the audit record still captures what was requested either way."""
+    value: float | str | None
+    if field_name in STRING_CANONICAL_FIELDS:
+        value = raw_value or None
+    else:
+        try:
+            value = float(raw_value) if raw_value not in ("", None) else None
+        except ValueError:
+            return
+
+    if field_name in PRODUCT_CANONICAL_FIELDS:
+        if txn.product is not None:
+            setattr(txn.product, field_name, value)
+    elif field_name in LEVEL3_TO_TRANSACTION_FIELD:
+        setattr(txn, LEVEL3_TO_TRANSACTION_FIELD[field_name], value)
+
+    final_output_field = _FINAL_OUTPUT_FIELD.get(field_name)
+    if final_output_field and txn.final_output is not None:
+        setattr(txn.final_output, final_output_field, value)
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -33,18 +77,42 @@ async def get_review_queue(session: Session = Depends(get_db)) -> list[ReviewQue
     for doc in documents:
         transactions = session.query(Transaction).filter(Transaction.document_id == doc.id).all()
         flagged_count = 0
-        reasons_set: set[str] = set()
+        # UI-UX-Implementation.md Phase A.2: grouped by rule_id (a count per
+        # R1-R7 rule, e.g. "3 rows failed R3") instead of a deduplicated set
+        # of raw pre-formatted sentences — the old distinct_review_reasons
+        # gave a UI nothing to key a business-friendly label off of besides
+        # parsing the sentence itself.
+        rule_counts: Counter[str] = Counter()
+        rule_samples: dict[str, str] = {}
 
         for txn in transactions:
             if txn.review and txn.review.review_status == "needs_review":
                 flagged_count += 1
                 for r in txn.review.review_reasons or []:
-                    reasons_set.add(str(r))
+                    # Rows persisted before this structured shape landed
+                    # (UI-UX-Implementation.md Phase A.2) still hold a plain
+                    # string in the real database — the JSON column doesn't
+                    # retroactively reshape historical rows. Nothing to
+                    # group such a reason by, so it's skipped here rather
+                    # than crashing the whole queue; it'll gain a rule_id
+                    # the next time that document is reprocessed.
+                    if not isinstance(r, dict):
+                        continue
+                    rule_id = r.get("rule_id")
+                    if not rule_id:
+                        continue
+                    rule_counts[rule_id] += 1
+                    rule_samples.setdefault(rule_id, r.get("message", ""))
 
         if flagged_count > 0 or len(transactions) == 0:
             period_str = None
             if doc.statement_from or doc.statement_to:
                 period_str = f"{doc.statement_from or ''} - {doc.statement_to or ''}"
+
+            reason_summary = [
+                ReviewReasonSummary(rule_id=rule_id, count=count, sample_detail=rule_samples[rule_id])
+                for rule_id, count in sorted(rule_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+            ]
 
             queue.append(
                 ReviewQueueItem(
@@ -56,7 +124,7 @@ async def get_review_queue(session: Session = Depends(get_db)) -> list[ReviewQue
                     source_file=doc.source_file,
                     total_rows=len(transactions),
                     flagged_rows_count=flagged_count,
-                    distinct_review_reasons=sorted(reasons_set),
+                    review_reason_summary=reason_summary,
                 )
             )
 
@@ -133,6 +201,7 @@ async def correct_document(
             promoted.append(f"{mapping_corr.source_header} -> {mapping_corr.canonical_field}")
 
     transactions = session.query(Transaction).filter(Transaction.document_id == document_id).all()
+    transactions_by_id = {t.id: t for t in transactions}
     updated_rows = 0
 
     for row_corr in request.row_corrections:
@@ -152,6 +221,10 @@ async def correct_document(
             )
             session.add(corr_rec)
             updated_rows += 1
+
+            txn_for_field = transactions_by_id.get(int(txn_id))
+            if txn_for_field is not None:
+                _apply_correction(txn_for_field, str(field_name), new_val)
 
     corrected_transaction_ids = {int(rc["transaction_id"]) for rc in request.row_corrections if rc.get("transaction_id")}
     now = dt.datetime.utcnow()

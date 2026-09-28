@@ -19,8 +19,24 @@ dependencies = [
     "numpy",
     # opencv-python-headless: this is a server/CLI pipeline, never cv2.imshow -
     # headless avoids pulling in GUI (Qt/GTK) system dependencies for nothing.
-    "opencv-python-headless",
-    # Added in P2 (OCR): paddleocr (paddlepaddle installed and smoke-tested in P0)
+    # Pinned to 4.x: opencv-python-headless 5.0.0.93 (pre-release) crashes on
+    # import on Windows/Python 3.13 with AttributeError on gapi_wip_gst_GStreamerPipeline
+    # (a known circular-import bug in the 5.x wheel). 4.10.0.84 is the latest
+    # stable release and works correctly.
+    "opencv-python-headless==4.10.0.84",
+    # Added in P2 (OCR). Pinned, not left open-ended: ocr/paddle_engine.py's
+    # own docstring documents that this exact pair is the only combination
+    # confirmed to run on this Windows/CPU setup (paddlepaddle 3.0.0 hits a
+    # different PIR attribute-type bug at model-load time). This entry was
+    # missing from this list despite the old comment claiming otherwise -
+    # paddleocr/paddlepaddle existed only in a separate, undeclared venv
+    # (`digitize_document/`), not in the one `uvicorn`/`.venv` actually runs,
+    # which is why a real upload through the running server failed with
+    # `No module named 'paddleocr'` even though tests (which import the same
+    # code but only exercise it through a cache-hit/mocked path in most
+    # suites) didn't catch it.
+    "paddlepaddle==3.3.1",
+    "paddleocr==3.7.0",
     # Added in P8 (Persist): alembic for schema migrations; pymysql as the
     # MySQL DBAPI driver CLAUDE.md's tech defaults name. This dev/test
     # environment persists to a local SQLite file by default (no MySQL
@@ -39,7 +55,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
-paddle = ["paddlepaddle"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

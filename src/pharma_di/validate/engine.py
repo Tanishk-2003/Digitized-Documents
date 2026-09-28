@@ -184,8 +184,12 @@ def validate_document(
         results.append(result)
 
         new_status = ReviewStatus.auto_accepted if result.all_rules_passed else ReviewStatus.needs_review
+        # UI-UX-Implementation.md Phase A.2: keep the structured ReviewReason
+        # objects (code/message/rule_id) instead of flattening to `.message`
+        # strings — CanonicalRow.review_reasons is list[ReviewReason] now, so
+        # a UI can render its own label per rule_id instead of parsing text.
         updated_rows.append(
-            row.model_copy(update={"review_status": new_status, "review_reasons": [r.message for r in review_reasons]})
+            row.model_copy(update={"review_status": new_status, "review_reasons": review_reasons})
         )
 
     return results, updated_rows

@@ -43,3 +43,33 @@ fingerprints:
     field:product_name_raw: product_name_raw
     field:opening_quantity: opening_quantity
     field:opening_value: opening_value
+  4e318a5847b881bb:
+    field:pack: pack
+    field:received_quantity: received_quantity
+  1dd8384b834a7797:
+    field:pack: pack
+    field:received_quantity: received_quantity
+  39f32a08f520cdc3:
+    field:product_name_raw: product_name_raw
+    field:pack: pack
+    field:opening_quantity: opening_quantity
+    field:opening_value: opening_value
+    field:received_quantity: received_quantity
+    field:received_value: received_value
+    field:sales_quantity: sales_quantity
+    field:sales_value: sales_value
+    field:closing_quantity: closing_quantity
+    field:closing_value: closing_value
+    field:dump_quantity: dump_quantity
+  bd86c82977fd3290:
+    field:product_name_raw: product_name_raw
+    field:pack: pack
+    field:opening_quantity: opening_quantity
+    field:received_quantity: received_quantity
+    field:sales_quantity: sales_quantity
+    field:closing_quantity: closing_quantity
+  2d7eb9d5a32d436d:
+    field:product_name_raw: product_name_raw
+    field:rate: rate
+    field:opening_quantity: opening_quantity
+    field:opening_value: opening_value

@@ -26,7 +26,7 @@ from pharma_di.schemas.canonical import (
     ReviewStatus,
     TransactionRecord,
 )
-from pharma_di.schemas.validation import RowValidationResult
+from pharma_di.schemas.validation import ReviewReason, RowValidationResult, RuleId
 from pharma_di.workers import jobs as jobs_module
 from pharma_di.workers.jobs import JobManager, JobStatus
 
@@ -101,7 +101,11 @@ def _seed_sample_doc(session: Session, document_id="doc6-api-test", review_statu
             page_number=1,
             extraction_confidence={"opening_quantity": 0.98},
             review_status=review_status,
-            review_reasons=["r2_totals_discrepancy"] if review_status == ReviewStatus.needs_review else [],
+            review_reasons=(
+                [ReviewReason(code="r2_totals_crossfoot", message="r2_totals_discrepancy", rule_id=RuleId.r2_totals_crossfoot)]
+                if review_status == ReviewStatus.needs_review
+                else []
+            ),
         )
     ]
     validation_results = [RowValidationResult(document_id=document_id, row_index=0, rule_results=[])]
@@ -222,6 +226,43 @@ def test_list_documents(client: TestClient, test_db_session: Session):
     assert "doc-list-2" in doc_ids
 
 
+def test_overview_endpoint_buckets_documents_the_same_way_the_statements_page_does(
+    client: TestClient, test_db_session: Session
+):
+    """UI-UX-Implementation.md Phase B.1: exercises all three buckets
+    (_statement_bucket must match ui/src/statementLanguage.js::
+    deriveStatementStatus exactly) plus the exception case, which
+    _seed_sample_doc's own defaults (always a real distributor, one row)
+    can't produce — built directly at the ORM level instead, same pattern
+    already used for the legacy-review_reasons regression test above."""
+    _seed_sample_doc(test_db_session, document_id="doc-overview-review", review_status=ReviewStatus.needs_review)
+    _seed_sample_doc(test_db_session, document_id="doc-overview-approved", review_status=ReviewStatus.auto_accepted)
+
+    exception_doc = Document(
+        id="doc-overview-exception",
+        distributor_id=None,
+        distributor_name=None,
+        source_file="unidentified.jpg",
+        page_number=1,
+        page_count=1,
+    )
+    test_db_session.add(exception_doc)
+    test_db_session.commit()
+
+    resp = client.get("/api/overview")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["received"] >= 3
+    assert data["review_required"] >= 1
+    assert data["approved"] >= 1
+    assert data["exceptions"] >= 1
+    assert data["received"] == data["review_required"] + data["approved"] + data["exceptions"]
+    assert isinstance(data["processing"], int)
+    assert len(data["recent"]) > 0
+    assert "document_id" in data["recent"][0]
+
+
 def test_get_document_detail_success_and_not_found(client: TestClient, test_db_session: Session):
     _seed_sample_doc(test_db_session, document_id="doc-detail-1")
 
@@ -313,7 +354,34 @@ def test_review_queue_endpoint(client: TestClient, test_db_session: Session):
     matching = next((item for item in data if item["document_id"] == "doc-review-1"), None)
     assert matching is not None
     assert matching["flagged_rows_count"] == 1
-    assert "r2_totals_discrepancy" in matching["distinct_review_reasons"]
+    assert matching["review_reason_summary"] == [
+        {"rule_id": "R2_totals_crossfoot", "count": 1, "sample_detail": "r2_totals_discrepancy"}
+    ]
+
+
+def test_review_queue_endpoint_tolerates_legacy_string_shaped_reasons(client: TestClient, test_db_session: Session):
+    """UI-UX-Implementation.md Phase A.2: a real bug, found live against the
+    actual database — rows persisted before review_reasons became
+    list[ReviewReason] still hold a plain string in the real MySQL database
+    (the JSON column doesn't retroactively reshape historical data), and
+    get_review_queue's new rule_id-grouping crashed the whole endpoint with
+    AttributeError: 'str' object has no attribute 'get' the moment ANY
+    flagged document had one. Simulates that real shape directly against
+    the ORM (CanonicalRow itself now requires the structured shape, so this
+    can't be reproduced through the normal save_document path — exactly
+    like it can't be produced by current code, only inherited from before
+    this change)."""
+    _seed_sample_doc(test_db_session, document_id="doc-review-legacy", review_status=ReviewStatus.needs_review)
+    review = test_db_session.query(ReviewRecord).join(Transaction).filter(Transaction.document_id == "doc-review-legacy").one()
+    review.review_reasons = ["1 field(s) below 0.85: worst is dump_quantity at 0.83"]
+    test_db_session.commit()
+
+    resp = client.get("/api/review-queue")
+    assert resp.status_code == 200
+    matching = next((item for item in resp.json() if item["document_id"] == "doc-review-legacy"), None)
+    assert matching is not None
+    assert matching["flagged_rows_count"] == 1
+    assert matching["review_reason_summary"] == []  # nothing to group a legacy string by rule_id
 
 
 def test_approve_document_endpoint(client: TestClient, test_db_session: Session):
@@ -373,9 +441,18 @@ def test_correct_document_endpoint(
     rev = test_db_session.query(ReviewRecord).filter(ReviewRecord.transaction_id == txn.id).first()
     assert rev.review_status == "human_corrected"
 
+    # UI-UX-Implementation.md Phase A.4: the correction must actually reach
+    # the real column, not just the Correction audit table — this used to
+    # be a real, honestly-flagged gap (P14 build notes): the audit record
+    # and review_status flip happened, but the value itself never changed,
+    # so "Correct" looked like it worked while silently doing nothing to
+    # the stored (or exported) data.
+    test_db_session.refresh(txn)
+    assert txn.opening_qty == 20.0
+    assert txn.final_output.opening_qty == 20.0  # FinalOutput mirrors this field (P14) — must move too
+
     # P14: the uniform final output table should say a human touched this
     # row too, not just the Correction audit log / review_status.
-    test_db_session.refresh(txn)
     assert txn.final_output.update_by == "human_reviewer"
     assert txn.final_output.updated_on is not None
 
@@ -385,3 +462,31 @@ def test_correct_document_endpoint(
     # isolated_column_mappings_path's own docstring).
     mappings = yaml.safe_load(isolated_column_mappings_path.read_text(encoding="utf-8"))
     assert "new_custom_hdr" in [a.lower() for a in mappings.get("opening_quantity", {}).get("aliases", [])]
+
+
+def test_correct_document_applies_a_product_level_field_too(client: TestClient, test_db_session: Session):
+    """Companion to test_correct_document_endpoint: product_name_raw/hsn_code/
+    pack/rate live on Product, not Transaction — a separate code path in
+    _apply_correction (PRODUCT_CANONICAL_FIELDS) that the Transaction-field
+    test above doesn't exercise."""
+    _seed_sample_doc(test_db_session, document_id="doc-correct-product", review_status=ReviewStatus.needs_review)
+    txn = test_db_session.query(Transaction).filter(Transaction.document_id == "doc-correct-product").first()
+
+    payload = {
+        "row_corrections": [
+            {
+                "transaction_id": txn.id,
+                "field_name": "product_name_raw",
+                "original_value": "COSKLOT REG TAB.",
+                "corrected_value": "COSKLOT REGULAR TABLET",
+            }
+        ],
+    }
+
+    resp = client.post("/api/review/doc-correct-product/correct", json=payload)
+    assert resp.status_code == 200
+    assert resp.json()["updated_rows"] == 1
+
+    test_db_session.refresh(txn)
+    assert txn.product.product_name_raw == "COSKLOT REGULAR TABLET"
+    assert txn.final_output.product_name == "COSKLOT REGULAR TABLET"  # FinalOutput mirrors this field too

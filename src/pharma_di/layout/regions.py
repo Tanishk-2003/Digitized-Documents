@@ -63,8 +63,27 @@ def _contains_any(text_upper: str, anchors: list[str]) -> bool:
     anchor phrases too (found on doc5.jpg: "PURCHASE DETAIL" was recognized
     as "PORCHASE  DETATL", which no exact-substring check would ever match).
     `fuzz.partial_ratio` is built for exactly this: how well a short anchor
-    matches *somewhere* inside a longer, noisy line."""
-    return any(fuzz.partial_ratio(a.upper(), text_upper) >= ANCHOR_FUZZY_THRESHOLD for a in anchors)
+    matches *somewhere* inside a longer, noisy line.
+
+    Each anchor is skipped unless the candidate line has at least half as
+    many characters as the anchor itself. `partial_ratio` scores the BEST
+    alignment of the shorter string against the longer one, which degenerates
+    on very short candidates: found on doc9.jpg, a text-detection gap split a
+    lone "S" off "SALES ANALYSIS" into its own one-token line, and
+    `partial_ratio("PURCHASE DETAIL", "S")` trivially scored 100 (any single
+    character that appears in the anchor "matches" it). That one false
+    trigger reclassified the rest of the page — the real stock table and the
+    footer identity block — as a purchase-detail region, since classification
+    treats everything after a trigger as the same region until the next
+    anchor. A real noisy OCR reading of a multi-word anchor still keeps
+    roughly half its characters (as "PORCHASE  DETATL" did); a stray
+    fragment doesn't.
+    """
+    stripped_len = len(text_upper.strip())
+    return any(
+        stripped_len >= len(a) / 2 and fuzz.partial_ratio(a.upper(), text_upper) >= ANCHOR_FUZZY_THRESHOLD
+        for a in anchors
+    )
 
 
 def matches_totals_row(tokens: list[OcrToken]) -> bool:
@@ -87,11 +106,55 @@ def _all_column_aliases() -> set[str]:
     return {a.lower() for entry in mappings.values() for a in entry.get("aliases", [])}
 
 
+_HEADER_ALIAS_MATCH_THRESHOLD = 80
+
+# Only tokens at least this long are eligible for the partial_ratio fallback
+# below. Picked to separate two real, verified cases: doc1.jpg's own "Stock"
+# column (5 chars) must NOT partial-match "opening stock" (mapping/fuzzy.py's
+# module docstring documents this exact subset-inflation failure mode and
+# deliberately avoids partial_ratio for column-to-field resolution for that
+# reason), while doc9.jpg's "ESCRIPTION" (10 chars, OCR dropped "ITEM D"
+# entirely from "ITEM DESCRIPTION") legitimately needs it. 8 sits strictly
+# between the two.
+_PARTIAL_MATCH_MIN_TOKEN_LEN = 8
+
+
+def _matches_any_alias(normalized: str, aliases: set[str]) -> bool:
+    """Whole-string `ratio` first (unchanged, original behavior — every
+    header match doc1-doc6's tests already rely on goes through this path
+    exactly as before). A `partial_ratio` fallback only fires for longer
+    tokens (see _PARTIAL_MATCH_MIN_TOKEN_LEN) that ratio scores too low on
+    purely because of a length mismatch with a longer alias — found on
+    doc9.jpg: "ESCRIPTION" is a clean 10-of-17-character substring match of
+    "item description" that partial_ratio finds immediately (100) but ratio
+    scores at 76.9 (just under threshold) solely because of the missing
+    "item d" prefix. Deliberately NOT applied to short tokens: partial_ratio
+    degenerates there (see _contains_any's docstring for the "S" case), and
+    a real short header word being a legitimate subset of a longer alias's
+    words (doc1.jpg's "Stock" vs "opening stock") is a different, weaker
+    signal that this project already special-cased once before
+    (mapping/fuzzy.py's token_set_ratio/token_sort_ratio combination) — reuse
+    that lesson here rather than reintroduce the same failure mode via a
+    different function.
+    """
+    for alias in aliases:
+        if fuzz.ratio(normalized, alias) >= _HEADER_ALIAS_MATCH_THRESHOLD:
+            return True
+    if len(normalized) < _PARTIAL_MATCH_MIN_TOKEN_LEN:
+        return False
+    for alias in aliases:
+        if len(normalized) < len(alias) / 2:
+            continue
+        if fuzz.partial_ratio(normalized, alias) >= _HEADER_ALIAS_MATCH_THRESHOLD:
+            return True
+    return False
+
+
 def _count_header_matches(tokens: list[OcrToken], aliases: set[str]) -> int:
     matches = 0
     for t in tokens:
         normalized = t.text.strip().lower()
-        if is_leaf_label(t.text) or any(fuzz.ratio(normalized, alias) >= 80 for alias in aliases):
+        if is_leaf_label(t.text) or _matches_any_alias(normalized, aliases):
             matches += 1
     return matches
 

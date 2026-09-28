@@ -1,12 +1,25 @@
-import { useState, useCallback } from "react";
-import { uploadDocument } from "../api";
+import { useState, useCallback, useEffect } from "react";
+import { uploadDocument, listJobs } from "../api";
 import Icon from "../components/Icon";
 import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
 
+const STEPS = [
+  "We read the statement",
+  "We standardize the stock & sales data",
+  "We validate the extracted values",
+  "We ask you to review only uncertain items",
+  "Approved data becomes available for export",
+];
+
 /**
- * UploadPage — drag-and-drop or click-to-upload document ingestion.
- * Shows live job status after submission.
+ * UploadPage — UI-UX-Implementation.md Phase B.3: reframed as submission,
+ * not a generic file-upload utility (brief §13/§14) — the drop zone speaks
+ * in terms of "statement," a "What happens next" explainer builds trust
+ * that a photographed statement turns into checked data automatically, and
+ * a live summary line ("N submitted, M processed, K need attention")
+ * replaces having to read a raw per-job table to know whether it worked.
+ * Job status polling reuses JobsPage's own interval pattern.
  */
 export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
@@ -40,9 +53,29 @@ export default function UploadPage() {
     e.target.value = "";
   };
 
+  useEffect(() => {
+    if (jobs.length === 0) return undefined;
+    const id = setInterval(async () => {
+      const all = await listJobs().catch(() => null);
+      if (!all) return;
+      setJobs((prev) => prev.map((j) => {
+        const fresh = all.find((a) => a.job_id === j.job_id);
+        return fresh ? { ...fresh, fileName: j.fileName } : j;
+      }));
+    }, 3000);
+    return () => clearInterval(id);
+  }, [jobs.length]);
+
+  const completedCount = jobs.filter((j) => j.status === "completed").length;
+  const failedCount = jobs.filter((j) => j.status === "failed").length;
+  const inProgressCount = jobs.length - completedCount - failedCount;
+
   return (
     <div>
-      <h2 className="page-title">Upload Document</h2>
+      <h2 className="page-title">Submit Stock &amp; Sale Statement</h2>
+      <p className="text-sm text-muted mb-4" style={{ marginTop: -12 }}>
+        Upload the statement received from your stockist/distributor.
+      </p>
 
       <div className="card mb-4">
         <label
@@ -61,14 +94,20 @@ export default function UploadPage() {
           <div className="upload-icon">
             <Icon name="upload" size={24} />
           </div>
-          <p className="upload-title">Drag &amp; drop document images, or click to browse</p>
-          <p>Supported: JPG, PNG, TIF, PDF</p>
+          <p className="upload-title">Drop statement here, or Browse files</p>
+          <p>PDF · JPG · PNG · TIFF</p>
         </label>
       </div>
 
       {jobs.length > 0 && (
-        <div className="card">
-          <div className="section-title">Submitted Jobs</div>
+        <div className="card mb-4">
+          <div className="section-title">Submitted Statements</div>
+          <p className="text-sm mb-3">
+            <strong>{jobs.length}</strong> statement{jobs.length === 1 ? "" : "s"} submitted
+            {completedCount > 0 && <span> · <strong style={{ color: "var(--success)" }}>{completedCount}</strong> processed successfully</span>}
+            {failedCount > 0 && <span> · <strong style={{ color: "var(--danger)" }}>{failedCount}</strong> need{failedCount === 1 ? "s" : ""} attention</span>}
+            {inProgressCount > 0 && <span> · <strong>{inProgressCount}</strong> still processing</span>}
+          </p>
           <div className="table-scroll">
             <table>
               <thead>
@@ -91,12 +130,20 @@ export default function UploadPage() {
               </tbody>
             </table>
           </div>
-          <p className="text-sm text-muted mt-2 flex items-center gap-2">
-            <Icon name="activity" size={13} />
-            Processing runs in the background (PaddleOCR can take several minutes). Check the Jobs tab for progress.
-          </p>
         </div>
       )}
+
+      <div className="card">
+        <div className="section-title">What happens next</div>
+        <ol className="whats-next-list">
+          {STEPS.map((step, i) => (
+            <li key={i}>
+              <span className="whats-next-num">{i + 1}</span>
+              {step}
+            </li>
+          ))}
+        </ol>
+      </div>
     </div>
   );
 }

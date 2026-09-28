@@ -129,7 +129,8 @@ body {
 .sidebar-nav a .icon { flex-shrink: 0; color: var(--muted-light); transition: color var(--fast) var(--ease); }
 .sidebar-nav a.active .icon, .sidebar-nav a:hover .icon { color: currentColor; }
 
-.sidebar-footer { margin-top: auto; padding: 16px 20px; font-size: 11px; color: var(--muted-light); }
+.sidebar-submit { margin-top: auto; padding: 12px 16px 4px; }
+.sidebar-footer { padding: 12px 20px 16px; font-size: 11px; color: var(--muted-light); }
 
 .sidebar-backdrop {
   display: none;
@@ -238,6 +239,37 @@ tbody tr:last-child td { border-bottom: none; }
 tr.flagged { background: var(--warning-light); }
 tr.flagged:hover { background: #fef3c7; }
 
+/* ---------- Overview tiles (UI-UX-Implementation.md Phase B.1) --------- */
+.overview-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+@media (max-width: 900px) { .overview-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .overview-grid { grid-template-columns: 1fr; } }
+.overview-tile { display: flex; flex-direction: column; gap: 2px; }
+.overview-tile-icon { color: var(--muted-light); margin-bottom: 6px; }
+.overview-tile-value { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+.overview-tile-label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.overview-tile-processing .overview-tile-icon, .overview-tile-processing .overview-tile-value { color: var(--primary); }
+.overview-tile-review .overview-tile-icon, .overview-tile-review .overview-tile-value { color: var(--warning); }
+.overview-tile-approved .overview-tile-icon, .overview-tile-approved .overview-tile-value { color: var(--success); }
+.overview-tile-exception .overview-tile-icon, .overview-tile-exception .overview-tile-value { color: var(--danger); }
+
+/* ---------- Statement cards (UI-UX-Implementation.md Phase A) ---------- */
+.statement-card { display: flex; align-items: center; gap: 16px; }
+.statement-card-title { font-weight: 700; font-size: 15px; }
+.statement-card-company { font-weight: 400; color: var(--muted); }
+.statement-card-review { border-color: var(--warning-border); background: var(--warning-light); }
+.statement-card-exception { border-color: var(--danger-border); background: var(--danger-light); align-items: flex-start; }
+.statement-card-icon { color: var(--danger); flex-shrink: 0; margin-top: 2px; }
+.statement-card-reasons { list-style: none; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.statement-card-reasons li { font-size: 12px; color: var(--warning); }
+.statement-card-reasons li::before { content: "• "; }
+
+/* ---------- Status pills (deriveStatementStatus, statementLanguage.js) --- */
+.status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
+.status-exception { background: var(--danger-light); color: #991b1b; }
+.status-review     { background: var(--warning-light); color: #92400e; }
+.status-approved   { background: var(--success-light); color: #166534; }
+.status-processing { background: var(--primary-light); color: var(--primary-text); }
+
 /* ---------- Confidence bar ---------- */
 .conf-bar-wrap { display: flex; align-items: center; gap: 6px; }
 .conf-bar { height: 6px; border-radius: 3px; background: #e5e7eb; flex: 1; min-width: 60px; overflow: hidden; }
@@ -245,6 +277,20 @@ tr.flagged:hover { background: #fef3c7; }
 .conf-high   { background: var(--success); }
 .conf-medium { background: var(--warning); }
 .conf-low    { background: var(--danger); }
+
+.conf-business-label { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; cursor: help; }
+.conf-business-label.conf-high   { color: var(--success); background: none; }
+.conf-business-label.conf-medium { color: var(--warning); background: none; }
+.conf-business-label.conf-low    { color: var(--danger); background: none; }
+
+/* ---------- What happens next (UI-UX-Implementation.md Phase B.3) ------ */
+.whats-next-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.whats-next-list li { display: flex; align-items: center; gap: 12px; font-size: 13.5px; }
+.whats-next-num {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: var(--radius-full);
+  background: var(--primary-light); color: var(--primary-text);
+  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
 
 /* ---------- Upload zone ---------- */
 .upload-zone {
@@ -287,6 +333,12 @@ input[type=text]:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px var(--primary-light);
 }
 input[type=text]::placeholder { color: var(--muted-light); }
+
+/* ---------- Statement nav (prev/next, Phase A.4) ---------- */
+.statement-nav { display: flex; align-items: center; justify-content: space-between; }
+
+/* ---------- Issue panel (focused issue-by-issue review, Phase A.4) ------ */
+.issue-panel-title { font-size: 17px; font-weight: 700; margin-top: 10px; }
 
 /* ---------- Row cards (review page) ---------- */
 .row-card {

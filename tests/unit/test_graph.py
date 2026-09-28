@@ -57,7 +57,7 @@ def _stub_ocr(monkeypatch, tmp_path):
     monkeypatch.setattr(
         nodes.detect_document_module,
         "detect_distributor",
-        lambda text, cfg: ("stub-distributor", "Stub Distributor", 1.0),
+        lambda text, cfg, extra_texts=None: ("stub-distributor", "Stub Distributor", 1.0),
     )
     monkeypatch.setattr(nodes.detect_document_module, "detect_company", lambda *args, **kwargs: "Stub Company")
 

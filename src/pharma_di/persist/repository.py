@@ -142,7 +142,11 @@ def _add_transaction_and_review(
     review = ReviewRecord(
         transaction=transaction,
         review_status=canonical_row.review_status.value,
-        review_reasons=list(canonical_row.review_reasons),
+        # UI-UX-Implementation.md Phase A.2: review_reasons is now a list of
+        # ReviewReason objects, not plain strings — same model_dump(mode="json")
+        # pattern already used for rule_results just below, so the JSON column
+        # gets plain dicts, not unserializable Pydantic model instances.
+        review_reasons=[r.model_dump(mode="json") for r in canonical_row.review_reasons],
         rule_results=[r.model_dump(mode="json") for r in validation_result.rule_results],
         extraction_confidence=dict(canonical_row.extraction_confidence),
         source_field_breakdown=dict(canonical_row.source_field_breakdown),
